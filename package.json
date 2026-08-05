@@ -1,0 +1,25 @@
+{
+  "name": "driver-induction-system",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:api": "npm --workspace apps/api run dev",
+    "build": "npm run build:web",
+    "build:web": "npm --workspace apps/web run build",
+    "build:api": "npm --workspace apps/api run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "puppeteer-core": "^24.43.1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
+    "pg": "^8.22.0",
+    "ws": "^8.21.1"
+  }
+}

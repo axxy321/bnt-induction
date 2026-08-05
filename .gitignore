@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+.env
+.env.local
+.env.*.local
+coverage
+.vite
+apps/api/build
+apps/api/.env
+apps/web/.env
+e2e-tests/
