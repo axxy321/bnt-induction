@@ -239,13 +239,29 @@ for each row execute procedure public.prevent_audit_log_changes();
 create or replace function public.is_admin(uid uuid)
 returns boolean
 language sql
+security definer
+set search_path = public
 stable
 as $$
   select exists (
-    select 1
-    from public.profiles
+    select 1 from public.profiles
     where id = uid and role = 'admin'
   );
+$$;
+
+create or replace function public.delete_user_by_admin(target_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+begin
+  if not public.is_admin(auth.uid()) then
+    raise exception 'Unauthorized: Only admins can delete users';
+  end if;
+  
+  delete from auth.users where id = target_user_id;
+end;
 $$;
 
 alter table public.profiles enable row level security;

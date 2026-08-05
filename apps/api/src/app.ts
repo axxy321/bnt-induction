@@ -89,7 +89,7 @@ async function logAuditEntry(userId: string, action: string, metadata: Record<st
   }
 }
 
-app.get("/health", (_request, response) => {
+app.get("/api/health", (_request, response) => {
   response.json({
     status: "ok",
     service: "driver-induction-api",
@@ -234,7 +234,7 @@ app.get("/api/induction/version", requireDriver, async (request: AdminRequest, r
  * GET /admin/induction-versions
  * Admin-facing. Lists all published induction versions, newest first.
  */
-app.get("/admin/induction-versions", requireAdmin, async (_request, response, next) => {
+app.get("/api/admin/induction-versions", requireAdmin, async (_request, response, next) => {
   try {
     const { data, error } = await supabaseAdmin
       .from("induction_versions")
@@ -255,7 +255,7 @@ app.get("/admin/induction-versions", requireAdmin, async (_request, response, ne
  * Drivers whose induction_progress.induction_version_id points to an older version
  * will be detected by GET /api/induction/version on next login.
  */
-app.post("/admin/induction-versions", requireAdmin, async (request: AdminRequest, response, next) => {
+app.post("/api/admin/induction-versions", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const schema = z.object({
       versionLabel: z.string().min(1).max(32),
@@ -300,7 +300,7 @@ app.post("/admin/induction-versions", requireAdmin, async (request: AdminRequest
 // END OF MILESTONE 1: Versioned Inductions Routes
 // ============================================================
 
-app.post("/admin/drivers", requireAdmin, async (request: AdminRequest, response, next) => {
+app.post("/api/admin/drivers", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const schema = z.object({
       fullName: z.string().min(2),
@@ -392,7 +392,7 @@ app.post("/admin/drivers", requireAdmin, async (request: AdminRequest, response,
   }
 });
 
-app.put("/admin/drivers/:driverId", requireAdmin, async (request: AdminRequest, response, next) => {
+app.put("/api/admin/drivers/:driverId", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const driverId = String(request.params.driverId);
     const schema = z.object({
@@ -436,7 +436,7 @@ app.put("/admin/drivers/:driverId", requireAdmin, async (request: AdminRequest, 
   }
 });
 
-app.post("/admin/drivers/:driverId/reset-password", requireAdmin, async (request: AdminRequest, response, next) => {
+app.post("/api/admin/drivers/:driverId/reset-password", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const driverId = String(request.params.driverId);
     const schema = z.object({
@@ -462,7 +462,7 @@ app.post("/admin/drivers/:driverId/reset-password", requireAdmin, async (request
 });
 
 // Bulk Driver Onboarding Endpoint
-app.post("/admin/drivers/bulk", requireAdmin, rateLimit(10, 60_000), async (request: AdminRequest, response, next) => {
+app.post("/api/admin/drivers/bulk", requireAdmin, rateLimit(10, 60_000), async (request: AdminRequest, response, next) => {
   try {
     const schema = z.object({
       drivers: z.array(z.object({
@@ -546,7 +546,7 @@ app.post("/admin/drivers/bulk", requireAdmin, rateLimit(10, 60_000), async (requ
 });
 
 // Admin Document Approval & Rejection Endpoints
-app.post("/admin/documents/:documentId/approve", requireAdmin, async (request: AdminRequest, response, next) => {
+app.post("/api/admin/documents/:documentId/approve", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const documentId = String(request.params.documentId);
     const now = new Date().toISOString();
@@ -573,7 +573,7 @@ app.post("/admin/documents/:documentId/approve", requireAdmin, async (request: A
   }
 });
 
-app.post("/admin/documents/:documentId/reject", requireAdmin, async (request: AdminRequest, response, next) => {
+app.post("/api/admin/documents/:documentId/reject", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const documentId = String(request.params.documentId);
     const schema = z.object({ reason: z.string().min(3) });
@@ -603,7 +603,7 @@ app.post("/admin/documents/:documentId/reject", requireAdmin, async (request: Ad
 });
 
 // Verification Queue Endpoints
-app.get("/admin/verification-queue", requireAdmin, async (_request, response, next) => {
+app.get("/api/admin/verification-queue", requireAdmin, async (_request, response, next) => {
   try {
     const { data: documents, error } = await supabaseAdmin
       .from("documents")
@@ -618,7 +618,7 @@ app.get("/admin/verification-queue", requireAdmin, async (_request, response, ne
   }
 });
 
-app.post("/admin/documents/:documentId/verify", requireAdmin, async (request: AdminRequest, response, next) => {
+app.post("/api/admin/documents/:documentId/verify", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const documentId = String(request.params.documentId);
     const schema = z.object({ action: z.enum(["approve", "reject"]), reason: z.string().optional() });
@@ -708,7 +708,7 @@ app.post("/api/auth/change-password", rateLimit(10, 60_000), async (request, res
   }
 });
 
-app.post("/admin/drivers/:driverId/reset-induction", requireAdmin, async (request: AdminRequest, response, next) => {
+app.post("/api/admin/drivers/:driverId/reset-induction", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const driverId = String(request.params.driverId);
     const resetAt = new Date().toISOString();
@@ -781,7 +781,7 @@ app.post("/admin/drivers/:driverId/reset-induction", requireAdmin, async (reques
   }
 });
 
-app.delete("/admin/drivers/:driverId", requireAdmin, async (request: AdminRequest, response, next) => {
+app.delete("/api/admin/drivers/:driverId", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const driverId = String(request.params.driverId);
 
@@ -821,7 +821,7 @@ app.delete("/admin/drivers/:driverId", requireAdmin, async (request: AdminReques
   }
 });
 
-app.patch("/admin/cms/questions/:id", requireAdmin, async (request: AdminRequest, response, next) => {
+app.patch("/api/admin/cms/questions/:id", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const questionId = String(request.params.id);
     const schema = z.object({
@@ -846,7 +846,7 @@ app.patch("/admin/cms/questions/:id", requireAdmin, async (request: AdminRequest
   }
 });
 
-app.patch("/admin/cms/sections/:id", requireAdmin, async (request: AdminRequest, response, next) => {
+app.patch("/api/admin/cms/sections/:id", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const sectionId = String(request.params.id);
     const schema = z.object({
@@ -869,7 +869,7 @@ app.patch("/admin/cms/sections/:id", requireAdmin, async (request: AdminRequest,
   }
 });
 
-app.get("/admin/reports/export", requireAdmin, async (request: AdminRequest, response, next) => {
+app.get("/api/admin/reports/export", requireAdmin, async (request: AdminRequest, response, next) => {
   try {
     const format = String(request.query.format ?? "csv");
     const scope = String(request.query.scope ?? "drivers");
@@ -991,7 +991,7 @@ app.get("/admin/reports/export", requireAdmin, async (request: AdminRequest, res
   }
 });
 
-app.get("/certificate/verify/:code", rateLimit(30, 60_000), async (request, response, next) => {
+app.get("/api/certificate/verify/:code", rateLimit(30, 60_000), async (request, response, next) => {
   try {
     const code = String(request.params.code);
     const { data: certificate, error: certificateError } = await supabaseAdmin
@@ -1285,7 +1285,7 @@ app.get("/api/induction/quiz-questions", requireDriver, async (request: AdminReq
   try {
     const { data, error } = await supabaseAdmin
       .from("quiz_questions")
-      .select("id, question, options, sort_order");
+      .select("id, question, options, sort_order, category, is_critical, correct_answer, explanation");
     
     if (error) throw error;
 
@@ -1401,7 +1401,7 @@ app.post("/api/induction/step", requireDriver, async (request: AdminRequest, res
     if (step === 3) {
       const sectionsPayload = (payload.sections as Array<{ sectionId: string; completed: boolean }> | undefined) ?? [];
       
-      const { data: dbSections } = await supabaseAdmin.from("learning_sections").select("id");
+      const { data: dbSections } = await supabaseAdmin.from("learning_sections").select("id, video_duration_seconds");
       
       // Upsert completions securely from backend
       for (const sec of sectionsPayload) {

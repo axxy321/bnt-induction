@@ -657,14 +657,26 @@ export const api = {
       // Direct Supabase fallback
     }
 
-    await supabase.from("documents").delete().eq("user_id", driverId);
-    await supabase.from("certificates").delete().eq("user_id", driverId);
-    await supabase.from("induction_progress").delete().eq("user_id", driverId);
-    await supabase.from("quiz_attempts").delete().eq("user_id", driverId);
-    await supabase.from("driver_feedback").delete().eq("user_id", driverId);
-    await supabase.from("learning_section_completions").delete().eq("user_id", driverId);
-    await supabase.from("drivers").delete().eq("user_id", driverId);
-    await supabase.from("profiles").delete().eq("id", driverId);
+    const { error: rpcError } = await supabase.rpc("delete_user_by_admin", { target_user_id: driverId });
+    if (rpcError) {
+      // If RPC fails (e.g., function not applied yet), fallback to manual cascading delete attempt
+      const { error: e1 } = await supabase.from("documents").delete().eq("user_id", driverId);
+      const { error: e2 } = await supabase.from("certificates").delete().eq("user_id", driverId);
+      const { error: e3 } = await supabase.from("induction_progress").delete().eq("user_id", driverId);
+      const { error: e4 } = await supabase.from("quiz_attempts").delete().eq("user_id", driverId);
+      const { error: e5 } = await supabase.from("driver_feedback").delete().eq("user_id", driverId);
+      const { error: e6 } = await supabase.from("learning_section_completions").delete().eq("user_id", driverId);
+      const { error: e7 } = await supabase.from("drivers").delete().eq("user_id", driverId);
+      const { error: e8 } = await supabase.from("profiles").delete().eq("id", driverId);
+
+      if (e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8) {
+        throw new Error(
+          rpcError.message || 
+          e8?.message || e7?.message || 
+          "Failed to delete driver via RLS or RPC. Please ensure Supabase database schema is fully updated."
+        );
+      }
+    }
   },
 
   async approveDocument(session: SessionState, documentId: string) {
@@ -709,7 +721,7 @@ export const api = {
   },
 
   async changePassword(session: SessionState, newPassword: string) {
-    const response = await fetch(`${apiBaseUrl}/api/auth/change-password`, {
+    const response = await fetch(`${apiBaseUrl}/auth/change-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
