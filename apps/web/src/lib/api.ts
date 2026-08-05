@@ -629,9 +629,18 @@ async function getProfile(userId: string) {
 }
 
 async function getDriverRow(userId: string) {
-  const { data, error } = await supabase.from("drivers").select("*").eq("user_id", userId).single();
+  const { data, error } = await supabase.from("drivers").select("*").eq("user_id", userId).maybeSingle();
   if (error) throw error;
-  return data;
+  if (data) return data;
+
+  const seed = {
+    user_id: userId,
+    status: "Not Started",
+    created_at: new Date().toISOString()
+  };
+  const { data: inserted, error: insertErr } = await supabase.from("drivers").insert(seed).select().single();
+  if (insertErr) throw insertErr;
+  return inserted;
 }
 
 async function getProgressRow(userId: string) {
