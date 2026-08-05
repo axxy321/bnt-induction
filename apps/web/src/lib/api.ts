@@ -215,13 +215,32 @@ export const api = {
 
   async getQuizQuestions(session?: SessionState) {
     if (!session) throw new Error("Unauthorized");
-    const response = await fetch(`${apiBaseUrl}/induction/quiz-questions`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` }
-    });
-    if (!response.ok) throw new Error("Failed to fetch questions");
-    const data = await response.json();
+    try {
+      const response = await fetch(`${apiBaseUrl}/induction/quiz-questions`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          questions: data.map((item: any) => ({
+            id: item.sort_order || item.id,
+            question: item.question,
+            options: Array.isArray(item.options) ? item.options.map(String) : [],
+            explanation: item.explanation,
+            category: item.category ?? "General",
+            isCritical: Boolean(item.is_critical)
+          })) satisfies QuizQuestion[]
+        };
+      }
+    } catch {
+      // Fallback to direct Supabase query
+    }
+
+    const { data: dbData, error: dbErr } = await supabase.from("quiz_questions").select("*").order("sort_order", { ascending: true });
+    if (dbErr || !dbData) throw new Error(dbErr?.message || "Failed to fetch quiz questions");
+
     return {
-      questions: data.map((item: any) => ({
+      questions: dbData.map((item: any) => ({
         id: item.sort_order || item.id,
         question: item.question,
         options: Array.isArray(item.options) ? item.options.map(String) : [],
