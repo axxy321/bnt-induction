@@ -264,6 +264,56 @@ begin
 end;
 $$;
 
+create extension if not exists pgcrypto;
+
+create or replace function public.create_user_by_admin(
+  new_email text,
+  new_password text,
+  new_full_name text,
+  new_phone text,
+  new_address text,
+  new_language text
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+declare
+  new_user_id uuid;
+  encrypted_pw text;
+begin
+  if not public.is_admin(auth.uid()) then
+    raise exception 'Unauthorized: Only admins can create users';
+  end if;
+
+  encrypted_pw := crypt(new_password, gen_salt('bf'));
+  new_user_id := gen_random_uuid();
+
+  insert into auth.users (
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, 
+    recovery_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, 
+    created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token
+  ) values (
+    '00000000-0000-0000-0000-000000000000', new_user_id, 'authenticated', 'authenticated', new_email, encrypted_pw, now(), 
+    null, null, '{"provider":"email","providers":["email"]}', '{}', 
+    now(), now(), '', '', '', ''
+  );
+  
+  insert into auth.identities (
+    id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+  ) values (
+    gen_random_uuid(), new_user_id, format('{"sub":"%s","email":"%s"}', new_user_id, new_email)::jsonb, 'email', null, now(), now()
+  );
+
+  insert into public.profiles (id, role, full_name) values (new_user_id, 'driver', new_full_name);
+  
+  insert into public.drivers (id, email, phone, address, preferred_language) 
+  values (new_user_id, new_email, new_phone, new_address, new_language);
+  
+  return new_user_id;
+end;
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.drivers enable row level security;
 alter table public.induction_progress enable row level security;

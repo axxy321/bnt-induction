@@ -578,10 +578,25 @@ export const api = {
     address: string;
     preferredLanguage: string;
   }) {
-    await adminRequest("/admin/drivers", session, {
-      method: "POST",
-      body: JSON.stringify(input)
-    });
+    try {
+      await adminRequest("/admin/drivers", session, {
+        method: "POST",
+        body: JSON.stringify(input)
+      });
+    } catch {
+      // Fallback to RPC if backend is unavailable
+      const { error } = await supabase.rpc("create_user_by_admin", {
+        new_email: input.email,
+        new_password: input.password,
+        new_full_name: input.fullName,
+        new_phone: input.phone,
+        new_address: input.address,
+        new_language: input.preferredLanguage
+      });
+      if (error) {
+        throw new Error(error.message || "Failed to create driver via fallback RPC.");
+      }
+    }
   },
 
   async updateDriverByAdmin(session: SessionState, driverId: string, input: {
@@ -716,14 +731,41 @@ export const api = {
     session: SessionState,
     drivers: Array<{ fullName: string; email: string; phone: string; address?: string; preferredLanguage?: string; password: string }>
   ) {
-    return await adminRequest<{ message: string; created: Array<{ id: string; email: string; fullName: string }>; errors: Array<{ email: string; reason: string }> }>(
-      "/admin/drivers/bulk",
-      session,
-      {
-        method: "POST",
-        body: JSON.stringify({ drivers })
+    try {
+      return await adminRequest<{ message: string; created: Array<{ id: string; email: string; fullName: string }>; errors: Array<{ email: string; reason: string }> }>(
+        "/admin/drivers/bulk",
+        session,
+        {
+          method: "POST",
+          body: JSON.stringify({ drivers })
+        }
+      );
+    } catch {
+      // Fallback to client-side loop using the RPC
+      const created = [];
+      const errors = [];
+      for (const driver of drivers) {
+        try {
+          const { data, error } = await supabase.rpc("create_user_by_admin", {
+            new_email: driver.email,
+            new_password: driver.password,
+            new_full_name: driver.fullName,
+            new_phone: driver.phone,
+            new_address: driver.address || "",
+            new_language: driver.preferredLanguage || "English"
+          });
+          if (error) throw new Error(error.message);
+          created.push({ id: data as string, email: driver.email, fullName: driver.fullName });
+        } catch (err: any) {
+          errors.push({ email: driver.email, reason: err.message || "Unknown error" });
+        }
       }
-    );
+      return {
+        message: `Processed ${drivers.length} drivers.`,
+        created,
+        errors
+      };
+    }
   },
 
   async changePassword(session: SessionState, newPassword: string) {
@@ -753,16 +795,49 @@ export const api = {
     if (options?.scope) params.set("scope", options.scope);
     if (options?.driverId) params.set("driverId", options.driverId);
 
-    const response = await fetch(`${apiBaseUrl}/admin/reports/export?${params.toString()}`, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/reports/export?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`
+        }
+      });
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("text/html")) {
+        throw new Error("HTML response received, fallback needed.");
       }
-    });
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({ message: "Export failed." }))) as { message?: string };
-      throw new Error(body.message ?? "Export failed.");
+      if (!response.ok) {
+        throw new Error("Export failed");
+      }
+      return await response.blob();
+    } catch (err) {
+      if (format === "pdf") {
+        throw new Error("PDF export requires a backend server. Please use Export CSV instead.");
+      }
+
+      let query = supabase.from(options?.scope === "audit" ? "audit_logs" : "drivers").select("*");
+      if (options?.driverId && options?.scope === "drivers") {
+        query = query.eq("id", options.driverId);
+      }
+      const { data, error } = await query;
+      if (error || !data) throw new Error("Failed to fetch data for export.");
+
+      if (data.length === 0) {
+        return new Blob(["No data available for export."], { type: "text/csv" });
+      }
+
+      const headers = Object.keys(data[0]).join(",");
+      const rows = data.map(row => 
+        Object.values(row).map(val => {
+          const str = String(val ?? "");
+          return str.includes(",") || str.includes('"') || str.includes("\n") 
+            ? `"${str.replace(/"/g, '""')}"` 
+            : str;
+        }).join(",")
+      );
+
+      const csvContent = [headers, ...rows].join("\n");
+      return new Blob([csvContent], { type: "text/csv" });
     }
-    return response.blob();
   },
 
   async verifyCertificate(code: string) {
