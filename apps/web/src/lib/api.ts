@@ -1037,6 +1037,9 @@ async function adminRequest<T = void>(path: string, session: SessionState, optio
     throw new Error(body.message ?? "Request failed.");
   }
   const contentType = response.headers.get("content-type");
+  if (contentType && contentType.includes("text/html")) {
+    throw new Error("Received HTML response instead of JSON. Backend API is likely unreachable.");
+  }
   if (contentType && contentType.includes("application/json")) {
     return (await response.json()) as T;
   }
