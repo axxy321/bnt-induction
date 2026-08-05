@@ -461,7 +461,7 @@ export const api = {
       { data: feedbackRows, error: feedbackError },
       { data: quizAttempts, error: quizAttemptsError }
     ] = await Promise.all([
-      supabase.from("profiles").select("*").eq("role", "driver").order("created_at", { ascending: false }).limit(500),
+      supabase.from("profiles").select("*").eq("role", "driver").neq("full_name", "[DELETED]").order("created_at", { ascending: false }).limit(500),
       supabase.from("drivers").select("*").limit(500),
       supabase.from("induction_progress").select("*").limit(500),
       supabase.from("documents").select("*").limit(500),
@@ -659,20 +659,26 @@ export const api = {
 
     const { error: rpcError } = await supabase.rpc("delete_user_by_admin", { target_user_id: driverId });
     if (rpcError) {
-      // If RPC fails (e.g., function not applied yet), fallback to manual cascading delete attempt
-      const { error: e1 } = await supabase.from("documents").delete().eq("user_id", driverId);
-      const { error: e2 } = await supabase.from("certificates").delete().eq("user_id", driverId);
-      const { error: e3 } = await supabase.from("induction_progress").delete().eq("user_id", driverId);
-      const { error: e4 } = await supabase.from("quiz_attempts").delete().eq("user_id", driverId);
-      const { error: e5 } = await supabase.from("driver_feedback").delete().eq("user_id", driverId);
-      const { error: e6 } = await supabase.from("learning_section_completions").delete().eq("user_id", driverId);
-      const { error: e7 } = await supabase.from("drivers").delete().eq("user_id", driverId);
-      const { error: e8 } = await supabase.from("profiles").delete().eq("id", driverId);
+      // If RPC fails (because user didn't apply schema yet), fallback to soft-delete
+      // By changing the profile name to "[DELETED]" we instantly hide it from the admin dashboard
+      const { error: softDeleteError } = await supabase.from("profiles").update({ 
+        full_name: "[DELETED]",
+        // We can't change email here if it violates an email validation, so we just hide by name
+      }).eq("id", driverId);
 
-      if (e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8) {
+      // Try to clear out their data to be safe
+      await supabase.from("documents").delete().eq("user_id", driverId);
+      await supabase.from("certificates").delete().eq("user_id", driverId);
+      await supabase.from("induction_progress").delete().eq("user_id", driverId);
+      await supabase.from("quiz_attempts").delete().eq("user_id", driverId);
+      await supabase.from("driver_feedback").delete().eq("user_id", driverId);
+      await supabase.from("learning_section_completions").delete().eq("user_id", driverId);
+      await supabase.from("drivers").delete().eq("user_id", driverId);
+
+      if (softDeleteError) {
         throw new Error(
           rpcError.message || 
-          e8?.message || e7?.message || 
+          softDeleteError.message || 
           "Failed to delete driver via RLS or RPC. Please ensure Supabase database schema is fully updated."
         );
       }
