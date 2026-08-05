@@ -29,6 +29,7 @@ import {
   DocumentType,
   DriverBundle,
   DriverProfile,
+  InductionVersion,
   LearningSectionProgress,
   ThemeMode
 } from "./types";
@@ -820,6 +821,7 @@ function AppContent() {
             <DriverSkeleton />
           ) : (
             <DriverExperience
+              inductionVersion={inductionVersion}
               bundle={driverBundle}
               profileDraft={profileDraft}
               profileErrors={profileErrors}
@@ -1279,6 +1281,7 @@ function LoginPanel(props: {
 }
 
 function DriverExperience(props: {
+  inductionVersion?: InductionVersion | null;
   bundle: DriverBundle;
   profileDraft: DriverProfile;
   profileErrors: Record<string, string>;
@@ -1332,6 +1335,7 @@ function DriverExperience(props: {
   const { t, i18n } = useTranslation();
   const stepTitles = stepTitlesBase.map(key => t(key));
   const {
+    inductionVersion,
     bundle,
     profileDraft,
     profileErrors,
