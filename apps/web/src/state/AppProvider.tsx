@@ -29,6 +29,7 @@ interface AppContextValue {
   inductionVersion: InductionVersion | null;
   loading: boolean;
   authLoading: boolean;
+  authError: string | null;
   login: (input: { email: string; password: string; role: "driver" | "admin" }) => Promise<void>;
   logout: () => Promise<void>;
   refreshDriverBundle: () => Promise<void>;
@@ -63,6 +64,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [inductionVersion, setInductionVersion] = useState<InductionVersion | null>(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     void bootstrapSession();
@@ -142,10 +144,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (input: { email: string; password: string; role: "driver" | "admin" }) => {
     setAuthLoading(true);
+    setAuthError(null);
     try {
       const nextSession = await api.login(input);
       setSession(nextSession);
       await syncSession(nextSession);
+    } catch (err: any) {
+      setAuthError(err?.message || "Sign in failed. Please verify your email and password.");
+      throw err;
     } finally {
       setAuthLoading(false);
     }
@@ -318,6 +324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       inductionVersion,
       loading,
       authLoading,
+      authError,
       login,
       logout,
       refreshDriverBundle,

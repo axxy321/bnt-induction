@@ -73,6 +73,7 @@ function AppContent() {
     quizQuestions,
     loading,
     authLoading,
+    authError,
     login,
     logout,
     refreshAdminOverview,
@@ -184,7 +185,7 @@ function AppContent() {
             <p className="muted">Loading Compliance Portal...</p>
           </div>
         ) : !session ? (
-          <LoginForm onLogin={login} loading={authLoading} />
+          <LoginForm onLogin={login} loading={authLoading} error={authError} />
         ) : session.user.role === "driver" && driverBundle ? (
           <DriverWizard
             bundle={driverBundle}
