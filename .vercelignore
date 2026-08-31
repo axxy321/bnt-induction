@@ -1,0 +1,4 @@
+apps/web/public/videos/*.mp4
+node_modules
+.git
+.DS_Store
