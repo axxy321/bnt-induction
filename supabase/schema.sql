@@ -1,7 +1,7 @@
 create extension if not exists "pgcrypto";
 
 create type public.user_role as enum ('admin', 'driver');
-create type public.document_type as enum ('driver_license', 'medical_certificate', 'identity_proof', 'driving_history', 'right_to_work', 'nhvas_bfm_certificate', 'dangerous_goods_license');
+create type public.document_type as enum ('driver_license', 'medical_certificate', 'identity_proof', 'driving_history', 'right_to_work', 'nhvas_bfm_certificate', 'dangerous_goods_license', 'hrwl_forklift', 'identity_selfie');
 create type public.document_status as enum ('pending', 'approved', 'rejected');
 
 create table if not exists public.profiles (
@@ -50,6 +50,8 @@ create table if not exists public.documents (
   status public.document_status not null default 'pending',
   rejection_reason text,
   verified_by_admin boolean not null default false,
+  verified_at timestamptz,
+  verified_by_user_id uuid references public.profiles(id) on delete set null,
   expires_at timestamptz,
   uploaded_at timestamptz not null default now()
 );
@@ -112,7 +114,7 @@ create table if not exists public.certificates (
 
 create table if not exists public.audit_logs (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null,
+  user_id uuid,
   correlation_id uuid default gen_random_uuid(),
   action text not null,
   metadata jsonb not null default '{}'::jsonb,
@@ -132,6 +134,8 @@ alter table public.induction_progress add column if not exists declaration_agree
 -- v1.0.1 Migrations: Strict compliance columns
 alter table public.documents add column if not exists status text not null default 'pending' check (status in ('pending', 'approved', 'rejected'));
 alter table public.documents add column if not exists verified_by_admin boolean not null default false;
+alter table public.documents add column if not exists verified_at timestamptz;
+alter table public.documents add column if not exists verified_by_user_id uuid references public.profiles(id) on delete set null;
 alter table public.audit_logs add column if not exists correlation_id uuid default gen_random_uuid();
 
 -- Indexes
@@ -208,7 +212,7 @@ begin
 
   -- Delete expired certificates forcing a re-issue
   delete from public.certificates where expires_at < now();
-  
+
   -- Update status of expired documents to pending so they need to be re-uploaded
   update public.documents set status = 'pending', verified_by_admin = false where expires_at < now();
 end;
@@ -259,7 +263,7 @@ begin
   if not public.is_admin(auth.uid()) then
     raise exception 'Unauthorized: Only admins can delete users';
   end if;
-  
+
   delete from auth.users where id = target_user_id;
 end;
 $$;
@@ -290,26 +294,27 @@ begin
   new_user_id := gen_random_uuid();
 
   insert into auth.users (
-    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, 
-    recovery_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, 
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+    recovery_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data,
     created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token
   ) values (
-    '00000000-0000-0000-0000-000000000000', new_user_id, 'authenticated', 'authenticated', new_email, encrypted_pw, now(), 
-    null, null, '{"provider":"email","providers":["email"]}', '{}', 
+    '00000000-0000-0000-0000-000000000000', new_user_id, 'authenticated', 'authenticated', new_email, encrypted_pw, now(),
+    null, null, '{"provider":"email","providers":["email"]}', '{}',
     now(), now(), '', '', '', ''
   );
-  
+
   insert into auth.identities (
     id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at
   ) values (
     gen_random_uuid(), new_user_id, format('{"sub":"%s","email":"%s"}', new_user_id, new_email)::jsonb, 'email', null, now(), now()
   );
 
-  insert into public.profiles (id, role, full_name) values (new_user_id, 'driver', new_full_name);
-  
-  insert into public.drivers (id, email, phone, address, preferred_language) 
-  values (new_user_id, new_email, new_phone, new_address, new_language);
-  
+  insert into public.profiles (id, role, full_name, email, phone, address, preferred_language)
+  values (new_user_id, 'driver', new_full_name, new_email, new_phone, new_address, new_language);
+
+  insert into public.drivers (user_id, status)
+  values (new_user_id, 'Not Started');
+
   return new_user_id;
 end;
 $$;
@@ -380,7 +385,8 @@ on public.induction_progress for select
 using (user_id = auth.uid() or public.is_admin(auth.uid()));
 
 drop policy if exists "induction_progress_upsert" on public.induction_progress;
-create policy "induction_progress_upsert"
+drop policy if exists "induction_progress_manage_admin" on public.induction_progress;
+create policy "induction_progress_manage_admin"
 on public.induction_progress for all
 using (public.is_admin(auth.uid()))
 with check (public.is_admin(auth.uid()));
@@ -477,7 +483,7 @@ using (user_id = auth.uid() or public.is_admin(auth.uid()));
 drop policy if exists "audit_logs_insert" on public.audit_logs;
 create policy "audit_logs_insert"
 on public.audit_logs for insert
-with check (user_id = auth.uid() or public.is_admin(auth.uid()));
+with check (public.is_admin(auth.uid()));
 
 drop policy if exists "driver_feedback_select" on public.driver_feedback;
 create policy "driver_feedback_select"
@@ -934,7 +940,7 @@ DROP INDEX IF EXISTS public.certificates_user_id_key;
 ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS induction_version_id uuid REFERENCES public.induction_versions(id);
 
 -- Create composite unique index so a driver can hold 1 certificate per induction version
-CREATE UNIQUE INDEX IF NOT EXISTS certificates_user_version_idx 
+CREATE UNIQUE INDEX IF NOT EXISTS certificates_user_version_idx
 ON public.certificates (user_id, induction_version_id);
 -- F-06: Atomic publish of induction versions to avoid TOCTOU window
 CREATE OR REPLACE FUNCTION publish_induction_version(label text, notes text, publisher uuid)
@@ -959,9 +965,9 @@ BEGIN
 END;
 $$;
 -- Add video_duration_seconds to learning_sections
-ALTER TABLE public.learning_sections 
+ALTER TABLE public.learning_sections
 ADD COLUMN IF NOT EXISTS video_duration_seconds int DEFAULT 0;
 
 -- Add section_started_at to learning_section_completions
-ALTER TABLE public.learning_section_completions 
+ALTER TABLE public.learning_section_completions
 ADD COLUMN IF NOT EXISTS section_started_at timestamptz;

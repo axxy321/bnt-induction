@@ -26,9 +26,16 @@ interface InductionVersionBannerProps {
 }
 
 export function InductionVersionBanner({ currentVersion, certificateVersionLabel }: InductionVersionBannerProps) {
-  const isOutdated = currentVersion.hasPendingVersion;
+  // H-4 FIX: isOutdated must compare the driver's certificate version label against the
+  // current published version — NOT hasPendingVersion (which is true whenever an admin drafts
+  // any new version, causing the banner to show to fully-compliant drivers incorrectly).
+  const isOutdated =
+    certificateVersionLabel !== null &&
+    certificateVersionLabel !== undefined &&
+    certificateVersionLabel !== currentVersion.versionLabel;
 
   if (!isOutdated) return null;
+
 
   return (
     <div

@@ -226,3 +226,59 @@ ADD COLUMN IF NOT EXISTS video_duration_seconds int DEFAULT 0;
 -- Add section_started_at to learning_section_completions
 ALTER TABLE public.learning_section_completions 
 ADD COLUMN IF NOT EXISTS section_started_at timestamptz;
+
+-- Migration 006: secure privileged version/reset functions.
+CREATE OR REPLACE FUNCTION publish_induction_version(label text, notes text, publisher uuid)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE new_id uuid; caller_role text;
+BEGIN
+  SELECT role INTO caller_role FROM profiles WHERE id = auth.uid();
+  IF caller_role IS DISTINCT FROM 'admin' THEN RAISE EXCEPTION 'Unauthorized: admin role required to publish induction versions'; END IF;
+  UPDATE induction_versions SET is_current = false WHERE is_current = true;
+  INSERT INTO induction_versions (version_label, revision_notes, published_by, is_current)
+  VALUES (label, notes, publisher, true) RETURNING id INTO new_id;
+  RETURN new_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION reset_expired_inductions()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE caller_role text;
+BEGIN
+  SELECT role INTO caller_role FROM profiles WHERE id = auth.uid();
+  IF caller_role IS DISTINCT FROM 'admin' THEN RAISE EXCEPTION 'Unauthorized: admin role required to reset expired inductions'; END IF;
+  UPDATE induction_progress ip SET completed = false, current_step = 1, completion_percentage = 0, updated_at = now()
+  FROM certificates c JOIN induction_versions iv ON iv.id = c.induction_version_id
+  WHERE ip.user_id = c.user_id AND iv.is_current = false AND ip.completed = true;
+END;
+$$;
+
+ALTER TABLE public.audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey;
+ALTER TABLE public.audit_logs ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE public.audit_logs ADD CONSTRAINT audit_logs_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+-- Migration 007/008: Australian document types and production completion controls.
+ALTER TYPE public.document_type ADD VALUE IF NOT EXISTS 'hrwl_forklift';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS licence_class text DEFAULT 'HC';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS issuing_state text DEFAULT 'VIC';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS licence_number text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS depot_location text DEFAULT 'Melbourne Hub';
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS licence_number text;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS issuing_state text;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS verified_at timestamptz;
+ALTER TABLE public.documents ADD COLUMN IF NOT EXISTS verified_by_user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS documents_expires_at_idx ON public.documents (expires_at) WHERE expires_at IS NOT NULL;
+
+DROP POLICY IF EXISTS "induction_progress_upsert" ON public.induction_progress;
+DROP POLICY IF EXISTS "induction_progress_manage_admin" ON public.induction_progress;
+CREATE POLICY "induction_progress_manage_admin" ON public.induction_progress FOR ALL
+  USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
+DROP POLICY IF EXISTS "audit_logs_insert" ON public.audit_logs;
+CREATE POLICY "audit_logs_insert" ON public.audit_logs FOR INSERT
+  WITH CHECK (public.is_admin(auth.uid()));
+
+DROP POLICY IF EXISTS "quiz_questions_select" ON public.quiz_questions;
+CREATE POLICY "quiz_questions_select" ON public.quiz_questions FOR SELECT
+  USING (public.is_admin(auth.uid()));

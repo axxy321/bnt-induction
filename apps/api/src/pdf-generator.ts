@@ -55,7 +55,7 @@ export function generateReportPdfBuffer(input: ReportPdfInput): Buffer {
   streamLines.push("/F1 10 Tf");
   streamLines.push("0.584 0.647 0.725 rg"); // #94a3b8
   streamLines.push(`${margin} ${pageHeight - 58} Td`);
-  streamLines.push(`(${escapePdfText(`${organizationName} • Generated: ${dateStr} • Total Records: ${rows.length}`)}) Tj`);
+  streamLines.push(`(${escapePdfText(`${organizationName} | Generated: ${dateStr} | Total Records: ${rows.length}`)}) Tj`);
   streamLines.push("ET");
 
   // Table Headers Bar
@@ -184,5 +184,13 @@ endobj`);
 }
 
 function escapePdfText(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  // M-7 FIX: PDF 1.4 string operands require escaping of \n and \r.
+  // Previously only backslashes and parentheses were escaped, meaning any
+  // text with newlines would produce an invalid/corrupt PDF content stream.
+  return value
+    .replace(/\\/g, "\\\\")  // backslash must be first
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
 }

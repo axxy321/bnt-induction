@@ -1,6 +1,6 @@
 # Driver Induction System
 
-An internal driver induction application for one transport organization, backed by Supabase.
+An internal driver induction application for one transport organisation, backed by Supabase and a required Node API. It is a company control, not an NHVR accreditation or a substitute for operational supervision, competency assessment, or legal advice.
 
 The system is designed for two everyday users:
 
@@ -44,7 +44,7 @@ Frontend in `apps/web/.env.local`:
 ```bash
 VITE_SUPABASE_URL=your-supabase-url
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-VITE_API_BASE_URL=http://localhost:4000
+VITE_API_BASE_URL=http://localhost:4000/api
 VITE_ORGANIZATION_NAME=Your Transport Company
 VITE_ORGANIZATION_LOGO_URL=https://your-company.example/logo.png
 ```
@@ -58,6 +58,7 @@ APP_URL=http://localhost:5173
 ORGANIZATION_NAME=Your Transport Company
 ORGANIZATION_LOGO_URL=https://your-company.example/logo.png
 PORT=4000
+ALLOW_SELF_REGISTRATION=false
 ```
 
 ## Run Locally
@@ -92,9 +93,9 @@ After signing in as an admin, you can:
 After signing in as a driver, the process is:
 
 1. Confirm personal details.
-2. Upload licence, medical certificate, and ID.
-3. Read the training modules and mark each one complete.
-4. Pass the quiz with at least 70 percent.
+2. Upload licence, medical certificate, and right-to-work evidence; wait for compliance approval.
+3. Complete the server-recorded training modules.
+4. Pass the server-graded quiz at its configured threshold, including all critical questions.
 5. Accept the declaration and type a digital signature.
 6. Download the certificate.
 
@@ -119,6 +120,7 @@ These flows are worth checking before rollout:
 - row level security is enabled across the main tables
 - storage access is limited to the user’s folder unless the viewer is an admin
 - audit logs are immutable and completed induction records are locked
+- self-registration is disabled by default; enable it only for a separately approved invite-free process
 
 ## Deployment
 
@@ -132,12 +134,13 @@ Backend:
 - deploy `apps/api` to any Node.js host
 - add the backend environment variables on the server
 - make sure `APP_URL` points to the deployed frontend
+- set `VITE_API_BASE_URL` to this API's HTTPS origin; do not use the web `functions/api` fallback as the induction backend
 
 Supabase:
 
 - keep RLS enabled
 - do not expose the service role key in the browser
-- apply schema changes from [supabase/schema.sql](/Users/ankur/Documents/Induction/supabase/schema.sql) whenever the project is updated
+- run `supabase/schema.sql` for a new database, or apply every numbered migration in order for an existing database
 
 ## Backup And Recovery
 

@@ -14,13 +14,14 @@ interface Env {
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
   const url = new URL(request.url);
-  const path = (params.path as string[])?.join("/") || "";
+  const rawPath = (params.path as string[])?.join("/") || "";
+  const cleanPath = rawPath.replace(/^api\//, "");
   const method = request.method;
 
   // Simple Router
   try {
     // Health Check
-    if (path === "health" && method === "GET") {
+    if ((cleanPath === "health" || rawPath === "health") && method === "GET") {
       return jsonResponse({
         status: "ok",
         service: "driver-induction-api-functions",
@@ -29,30 +30,38 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       });
     }
 
+    // --- Public Registration Route ---
+    if (cleanPath === "auth/register-driver" && method === "POST") {
+      if ((env as Record<string, string | undefined>).ALLOW_SELF_REGISTRATION !== "true") {
+        return errorResponse("Self-registration is disabled. Ask your administrator to create your induction account.", 403);
+      }
+      return handleSelfRegisterDriver(request, env);
+    }
+
     // --- Admin Routes ---
-    if (path.startsWith("admin/")) {
+    if (cleanPath.startsWith("admin/")) {
       const adminId = await requireAdmin(request, env);
       if (!adminId) return errorResponse("Admin access required.", 401);
 
       // Create Driver
-      if (path === "admin/drivers" && method === "POST") {
+      if (cleanPath === "admin/drivers" && method === "POST") {
         return handleCreateDriver(request, env, adminId);
       }
 
       // Update Driver
-      const driverMatch = path.match(/^admin\/drivers\/([^/]+)$/);
+      const driverMatch = cleanPath.match(/^admin\/drivers\/([^/]+)$/);
       if (driverMatch && method === "PUT") {
         return handleUpdateDriver(request, env, adminId, driverMatch[1]);
       }
 
       // Reset Password
-      const pwResetMatch = path.match(/^admin\/drivers\/([^/]+)\/reset-password$/);
+      const pwResetMatch = cleanPath.match(/^admin\/drivers\/([^/]+)\/reset-password$/);
       if (pwResetMatch && method === "POST") {
         return handleResetPassword(request, env, adminId, pwResetMatch[1]);
       }
 
       // Reset Induction
-      const inductionResetMatch = path.match(/^admin\/drivers\/([^/]+)\/reset-induction$/);
+      const inductionResetMatch = cleanPath.match(/^admin\/drivers\/([^/]+)\/reset-induction$/);
       if (inductionResetMatch && method === "POST") {
         return handleResetInduction(request, env, adminId, inductionResetMatch[1]);
       }
@@ -63,41 +72,44 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       }
 
       // Export Reports
-      if (path === "admin/reports/export" && method === "GET") {
+      if (cleanPath === "admin/reports/export" && method === "GET") {
         return handleExportReports(url, env, adminId);
       }
 
       // Verification Queue — GET all pending documents
-      if (path === "admin/verification-queue" && method === "GET") {
+      if (cleanPath === "admin/verification-queue" && method === "GET") {
         return handleGetVerificationQueue(env, adminId);
       }
 
       // Approve / Reject a document
-      const docVerifyMatch = path.match(/^admin\/documents\/([^/]+)\/verify$/);
+      const docVerifyMatch = cleanPath.match(/^admin\/documents\/([^/]+)\/verify$/);
       if (docVerifyMatch && method === "POST") {
         return handleVerifyDocument(request, env, adminId, docVerifyMatch[1]);
       }
     }
 
     // --- Public Routes ---
-    
+
     // Verify Certificate
-    const verifyMatch = path.match(/^certificate\/verify\/([^/]+)$/);
+    const verifyMatch = cleanPath.match(/^certificate\/verify\/([^/]+)$/);
     if (verifyMatch && method === "GET") {
       return handleVerifyCertificate(verifyMatch[1], env, request);
     }
 
-    // OCR Document Verification
-    if (path === "api/documents/verify" && method === "POST") {
-      return handleOCRVerify(request, env);
+    // OCR is deliberately not exposed as a public service-role endpoint. Document
+    // approval and expiry decisions must be made by an authorised compliance user.
+    if ((cleanPath === "documents/verify" || rawPath === "api/documents/verify") && method === "POST") {
+      return errorResponse("Document verification is performed by authorised compliance staff.", 403);
     }
 
-    // Notifications
-    if (path === "api/notifications/notify" && method === "POST") {
+    // Notifications can dispatch third-party email and therefore require admin auth.
+    if ((cleanPath === "notifications/notify" || rawPath === "api/notifications/notify") && method === "POST") {
+      const adminId = await requireAdmin(request, env);
+      if (!adminId) return errorResponse("Admin access required.", 401);
       return handleNotify(request, env);
     }
 
-    return errorResponse("Route not found: " + path, 404);
+    return errorResponse("Route not found: " + rawPath, 404);
   } catch (err: any) {
     console.error("API Error:", err);
     return errorResponse(err.message || "Internal Server Error", 500);
@@ -109,7 +121,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type"
+    }
   });
 }
 
@@ -129,7 +145,7 @@ async function requireAdmin(request: Request, env: Env) {
 
   const token = header.slice("Bearer ".length);
   const supabase = getSupabaseAdmin(env);
-  
+
   const { data: authData, error: authError } = await supabase.auth.getUser(token);
   if (authError || !authData.user) return null;
 
@@ -143,15 +159,87 @@ async function requireAdmin(request: Request, env: Env) {
 }
 
 async function logAuditEntry(supabase: any, userId: string, action: string, metadata: any) {
-  await supabase.from("audit_logs").insert({
+  const { error } = await supabase.from("audit_logs").insert({
     user_id: userId,
     action,
     metadata,
     created_at: new Date().toISOString()
   });
+  // M-13 fix: log failures instead of silently swallowing them
+  if (error) {
+    console.error("[AUDIT] Failed to write audit log:", action, error.message);
+  }
+}
+
+async function handleSelfRegisterDriver(request: Request, env: Env) {
+  const supabase = getSupabaseAdmin(env);
+  const registerSchema = z.object({
+    fullName: z.string().min(2),
+    email: z.string().email(),
+    phone: z.string().min(5),
+    address: z.string().min(5),
+    preferredLanguage: z.string().min(2).default("English"),
+    password: z.string().min(8),
+    depotCode: z.string().optional()
+  });
+
+  const payload = registerSchema.parse(await request.json());
+  const emailLower = payload.email.toLowerCase().trim();
+
+  const { data: createdUser, error: authErr } = await supabase.auth.admin.createUser({
+    email: emailLower,
+    password: payload.password,
+    email_confirm: true,
+    user_metadata: { role: "driver", must_change_password: false, depot_code: payload.depotCode }
+  });
+
+  if (authErr || !createdUser.user) {
+    return errorResponse(authErr?.message ?? "Registration failed", 400);
+  }
+
+  const userId = createdUser.user.id;
+  const now = new Date().toISOString();
+
+  const [profileRes, driverRes, progressRes] = await Promise.allSettled([
+    supabase.from("profiles").insert({
+      id: userId, role: "driver", email: emailLower, full_name: payload.fullName,
+      phone: payload.phone, address: payload.address, preferred_language: payload.preferredLanguage,
+      created_at: now, updated_at: now
+    }),
+    supabase.from("drivers").insert({ user_id: userId, status: "Not Started", created_at: now }),
+    supabase.from("induction_progress").insert({
+      user_id: userId, current_step: 1, completion_percentage: 0, completed: false,
+      completed_step_ids: [], updated_at: now
+    })
+  ]);
+
+  const insertErrors: string[] = [];
+  for (const [label, res] of [["profiles", profileRes], ["drivers", driverRes], ["induction_progress", progressRes]] as [string, PromiseSettledResult<any>][]) {
+    if (res.status === "rejected") {
+      insertErrors.push(`${label}: ${res.reason?.message ?? "unknown"}`);
+    } else if (res.value?.error) {
+      insertErrors.push(`${label}: ${res.value.error.message}`);
+    }
+  }
+
+  if (insertErrors.length > 0) {
+    await supabase.auth.admin.deleteUser(userId).catch(() => {});
+    return errorResponse(`Registration failed: ${insertErrors.join("; ")}`, 500);
+  }
+
+  const { data: sections } = await supabase.from("learning_sections").select("id");
+  if (sections?.length) {
+    await supabase.from("learning_section_completions").insert(
+      sections.map((sec: any) => ({ user_id: userId, section_id: sec.id, completed: false, updated_at: now }))
+    );
+  }
+
+  await logAuditEntry(supabase, userId, "driver_self_registered", { email: emailLower, depotCode: payload.depotCode });
+  return jsonResponse({ message: "Registration successful. You can now log in.", email: emailLower });
 }
 
 // --- Route Handlers ---
+
 
 async function handleCreateDriver(request: Request, env: Env, adminId: string) {
   const supabase = getSupabaseAdmin(env);
@@ -163,7 +251,7 @@ async function handleCreateDriver(request: Request, env: Env, adminId: string) {
     address: z.string().min(5),
     preferredLanguage: z.string().min(2)
   });
-  
+
   const payload = schema.parse(await request.json());
   const { data: createdUser, error: createError } = await supabase.auth.admin.createUser({
     email: payload.email,
@@ -177,7 +265,10 @@ async function handleCreateDriver(request: Request, env: Env, adminId: string) {
   const userId = createdUser.user.id;
   const now = new Date().toISOString();
 
-  await Promise.all([
+  // C-5 FIX: Check errors from all Supabase inserts individually.
+  // Supabase JS never throws — errors are returned as { data, error }.
+  // An unchecked failure creates an orphaned auth user with no profile.
+  const [profileRes, driverRes, progressRes] = await Promise.allSettled([
     supabase.from("profiles").insert({
       id: userId, role: "driver", email: payload.email, full_name: payload.fullName,
       phone: payload.phone, address: payload.address, preferred_language: payload.preferredLanguage,
@@ -189,6 +280,24 @@ async function handleCreateDriver(request: Request, env: Env, adminId: string) {
       completed_step_ids: [], updated_at: now
     })
   ]);
+
+  // Collect any insert errors and roll back the auth user if any failed
+  const insertErrors: string[] = [];
+  for (const [label, res] of [["profiles", profileRes], ["drivers", driverRes], ["induction_progress", progressRes]] as [string, PromiseSettledResult<any>][]) {
+    if (res.status === "rejected") {
+      insertErrors.push(`${label}: ${res.reason?.message ?? "unknown error"}`);
+    } else if (res.value?.error) {
+      insertErrors.push(`${label}: ${res.value.error.message}`);
+    }
+  }
+
+  if (insertErrors.length > 0) {
+    // Roll back: delete the auth user to avoid orphaned account
+    await supabase.auth.admin.deleteUser(userId).catch((e: any) =>
+      console.error("[ROLLBACK] Failed to delete orphaned auth user:", e.message)
+    );
+    throw new Error(`Driver creation failed — DB inserts failed: ${insertErrors.join("; ")}`);
+  }
 
   // Initial Sections
   const { data: sections } = await supabase.from("learning_sections").select("id");
@@ -205,14 +314,31 @@ async function handleCreateDriver(request: Request, env: Env, adminId: string) {
 
 async function handleUpdateDriver(request: Request, env: Env, adminId: string, driverId: string) {
   const supabase = getSupabaseAdmin(env);
-  const payload = await request.json();
-  
-  await supabase.auth.admin.updateUserById(driverId, { email: payload.email });
-  await supabase.from("profiles").update({
-    email: payload.email, full_name: payload.fullName, phone: payload.phone,
-    address: payload.address, preferred_language: payload.preferredLanguage,
+
+  // H-11 FIX: Validate input with Zod — raw unvalidated JSON was passed to admin APIs
+  const updateSchema = z.object({
+    email: z.string().email().optional(),
+    fullName: z.string().min(2).optional(),
+    phone: z.string().min(5).optional(),
+    address: z.string().min(5).optional(),
+    preferredLanguage: z.string().min(2).optional()
+  });
+  const payload = updateSchema.parse(await request.json());
+
+  if (payload.email) {
+    const { error: authErr } = await supabase.auth.admin.updateUserById(driverId, { email: payload.email });
+    if (authErr) throw new Error(`Auth update failed: ${authErr.message}`);
+  }
+
+  const { error: profileErr } = await supabase.from("profiles").update({
+    ...(payload.email && { email: payload.email }),
+    ...(payload.fullName && { full_name: payload.fullName }),
+    ...(payload.phone && { phone: payload.phone }),
+    ...(payload.address && { address: payload.address }),
+    ...(payload.preferredLanguage && { preferred_language: payload.preferredLanguage }),
     updated_at: new Date().toISOString()
   }).eq("id", driverId);
+  if (profileErr) throw new Error(`Profile update failed: ${profileErr.message}`);
 
   await logAuditEntry(supabase, adminId, "admin_driver_updated", { driverId, email: payload.email });
   return jsonResponse({ message: "Driver updated" });
@@ -254,7 +380,7 @@ async function handleResetInduction(request: Request, env: Env, adminId: string,
 
 async function handleDeleteDriver(request: Request, env: Env, adminId: string, driverId: string) {
   const supabase = getSupabaseAdmin(env);
-  
+
   // Cleanup
   const { data: docs } = await supabase.from("documents").select("file_url").eq("user_id", driverId);
   if (docs?.length) {
@@ -276,7 +402,8 @@ async function handleDeleteDriver(request: Request, env: Env, adminId: string, d
 async function handleExportReports(url: URL, env: Env, adminId: string) {
   const supabase = getSupabaseAdmin(env);
   const scope = url.searchParams.get("scope") || "drivers";
-  
+  const format = url.searchParams.get("format") || "csv";
+
   let data: any[] = [];
   if (scope === "drivers") {
     const { data: profiles } = await supabase.from("profiles").select("id,email,full_name").eq("role", "driver");
@@ -286,10 +413,50 @@ async function handleExportReports(url: URL, env: Env, adminId: string) {
     data = logs || [];
   }
 
-  await logAuditEntry(supabase, adminId, "admin_report_exported", { scope });
-  
-  // Simple CSV export for Worker environment
+  await logAuditEntry(supabase, adminId, "admin_report_exported", { scope, format });
+
   const headers = Object.keys(data[0] || {});
+
+  if (format === "pdf") {
+    // Generate styled printable HTML report for PDF export in Cloudflare Worker environment
+    const htmlReport = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${env.ORGANIZATION_NAME || "BNT Logistics"} ${scope.toUpperCase()} Report</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 40px; color: #1e293b; }
+    h1 { color: #0f172a; margin-bottom: 4px; }
+    p.meta { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 12px; border-bottom: 2px solid #cbd5e1; }
+    td { padding: 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>${env.ORGANIZATION_NAME || "BNT Logistics"} — ${scope.toUpperCase()} Report</h1>
+  <p class="meta">Generated: ${new Date().toLocaleString()} | Total Records: ${data.length}</p>
+  <table>
+    <thead>
+      <tr>${headers.map(h => `<th>${h.toUpperCase()}</th>`).join("")}</tr>
+    </thead>
+    <tbody>
+      ${data.map(row => `<tr>${headers.map(h => `<td>${String(row[h] ?? "")}</td>`).join("")}</tr>`).join("")}
+    </tbody>
+  </table>
+  <script>window.onload = function() { window.print(); }</script>
+</body>
+</html>`;
+
+    return new Response(htmlReport, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Disposition": `inline; filename=report-${scope}.html`
+      }
+    });
+  }
+
+  // CSV export fallback
   const csv = [
     headers.join(","),
     ...data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","))
@@ -347,10 +514,26 @@ async function handleNotify(request: Request, env: Env) {
   const { eventType, userEmail, driverName, context } = payload;
 
   console.log(`[NOTIFICATION] ${eventType} for ${userEmail}`);
-  
-  if (env.RESEND_API_KEY) {
-     // Implement Resend fetch here if needed, sticking to mock for now
-     console.log("Resend API Key found, would send actual email.");
+
+  if (env.RESEND_API_KEY && userEmail) {
+     try {
+       await fetch("https://api.resend.com/emails", {
+         method: "POST",
+         headers: {
+           "Authorization": `Bearer ${env.RESEND_API_KEY}`,
+           "Content-Type": "application/json"
+         },
+         body: JSON.stringify({
+           from: env.RESEND_FROM_EMAIL || "notifications@resend.dev",
+           to: userEmail,
+           subject: `${env.ORGANIZATION_NAME || "BNT Logistics"} Notification: ${eventType}`,
+           html: `<p>Hello ${driverName || "Driver"},</p><p>Event: <strong>${eventType}</strong></p><p>${context || ""}</p>`
+         })
+       });
+       console.log(`[NOTIFICATION] Resend email dispatched to ${userEmail}`);
+     } catch (e) {
+       console.error("[NOTIFICATION] Resend dispatch error:", e);
+     }
   }
 
   return jsonResponse({ message: "Notification dispatched" });
@@ -441,13 +624,17 @@ async function handleVerifyDocument(request: Request, env: Env, adminId: string,
       const completedSteps: number[] = progress?.completed_step_ids ?? [];
       if (!completedSteps.includes(1)) completedSteps.push(1);
 
-      await supabase.from("induction_progress").update({
+      // H-12 FIX: Check errors from progress advance DB calls — silent failures
+      // leave the driver perpetually stuck in the system with no way to progress.
+      const { error: progressErr } = await supabase.from("induction_progress").update({
         current_step: Math.max(progress?.current_step ?? 1, 2),
         completed_step_ids: completedSteps.sort((a, b) => a - b),
         updated_at: new Date().toISOString()
       }).eq("user_id", driverId);
+      if (progressErr) throw new Error(`Failed to advance driver progress: ${progressErr.message}`);
 
-      await supabase.from("drivers").update({ status: "In Progress" }).eq("user_id", driverId);
+      const { error: statusErr } = await supabase.from("drivers").update({ status: "In Progress" }).eq("user_id", driverId);
+      if (statusErr) throw new Error(`Failed to update driver status: ${statusErr.message}`);
     }
   }
 

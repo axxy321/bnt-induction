@@ -21,6 +21,8 @@ interface LearningSection {
   format: string;
   summary: string;
   video_url: string | null;
+  video_duration_seconds?: number;
+  require_full_watch?: boolean;
   sort_order: number;
   _isJson?: boolean;
   _intro?: string;
@@ -140,7 +142,9 @@ export function AdminCMS() {
         body: JSON.stringify({
           summary: updatedSummary,
           format: s.format,
-          video_url: s.video_url || null
+          video_url: s.video_url || null,
+          video_duration_seconds: s.video_duration_seconds ? Number(s.video_duration_seconds) : 0,
+          require_full_watch: Boolean(s.require_full_watch)
         })
       });
       if (!res.ok) throw new Error(`Save failed: ${res.status}`);
@@ -228,6 +232,18 @@ export function AdminCMS() {
                   <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-muted)" }}>Video URL (optional)</label>
                   <input placeholder="https://..." value={editingSection.video_url ?? ""} onChange={(e) => setEditingSection({ ...editingSection, video_url: e.target.value || null })}
                     style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.9rem" }} />
+
+                  <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--color-muted)", display: "block" }}>Required Video Duration (Seconds)</label>
+                      <input type="number" min="0" value={editingSection.video_duration_seconds ?? 0} onChange={(e) => setEditingSection({ ...editingSection, video_duration_seconds: Number(e.target.value) })}
+                        style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.9rem", width: "100%" }} />
+                    </div>
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", marginTop: "18px" }}>
+                      <input type="checkbox" id="require_full_watch" checked={Boolean(editingSection.require_full_watch)} onChange={(e) => setEditingSection({ ...editingSection, require_full_watch: e.target.checked })} />
+                      <label htmlFor="require_full_watch" style={{ fontSize: "0.85rem", fontWeight: 600, cursor: "pointer" }}>Enforce Anti-Cheat Full Watch</label>
+                    </div>
+                  </div>
                   <div style={{ display: "flex", gap: "10px" }}>
                     <button onClick={() => void saveSection(editingSection)} disabled={saving === section.id}
                       style={{ padding: "8px 20px", background: "#1e3a5f", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: 600 }}>

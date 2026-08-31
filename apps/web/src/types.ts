@@ -1,7 +1,16 @@
 export type UserRole = "driver" | "admin";
 export type ThemeMode = "light" | "dark";
 export type DriverStatus = "Not Started" | "In Progress" | "Completed";
-export type DocumentType = "driver_license" | "medical_certificate" | "identity_proof" | "driving_history" | "right_to_work" | "nhvas_bfm_certificate" | "dangerous_goods_license" | "identity_selfie";
+export type DocumentType =
+  | "driver_license"
+  | "medical_certificate"
+  | "identity_proof"
+  | "driving_history"
+  | "right_to_work"
+  | "nhvas_bfm_certificate"
+  | "dangerous_goods_license"
+  | "hrwl_forklift"
+  | "identity_selfie";
 
 export interface SessionUser {
   id: string;
@@ -17,6 +26,31 @@ export interface SessionState {
   user: SessionUser;
 }
 
+export interface DriverSelfRegisterInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  address: string;
+  preferredLanguage: string;
+  password: string;
+  depotCode?: string;
+  licenceClass?: string;
+  issuingState?: string;
+  licenceNumber?: string;
+}
+
+export interface DriverFormInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  address: string;
+  preferredLanguage: string;
+  licenceClass?: string;
+  issuingState?: string;
+  licenceNumber?: string;
+  depotLocation?: string;
+}
+
 export interface DriverProfile {
   id: string;
   fullName: string;
@@ -24,6 +58,10 @@ export interface DriverProfile {
   phone: string;
   address: string;
   preferredLanguage: string;
+  licenceClass?: string;
+  issuingState?: string;
+  licenceNumber?: string;
+  depotLocation?: string;
   status: DriverStatus;
   createdAt: string;
   updatedAt: string;
@@ -188,9 +226,9 @@ export interface CertificateVerificationResult {
 export interface QuizSubmitResult {
   score: number;
   passed: boolean;
-  attempt: QuizAttempt;
-  questions: Array<{ id: number; explanation: string; correctAnswer: number }>;
-  state: DriverBundle;
+  attempt?: QuizAttempt;
+  questions?: Array<{ id: number; explanation: string; correctAnswer: number }>;
+  state?: DriverBundle;
   categoryScores?: Record<string, number>;
   failedCritical?: boolean;
   failedCriticalReason?: string;

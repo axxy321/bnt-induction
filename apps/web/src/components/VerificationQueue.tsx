@@ -29,6 +29,7 @@ export function VerificationQueue() {
   const [docs, setDocs] = useState<PendingDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [expiryByDocument, setExpiryByDocument] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   const showToast = (msg: string, ok = true) => {
@@ -66,7 +67,12 @@ export function VerificationQueue() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.accessToken}`
         },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({
+          action,
+          ...(action === "approve" && expiryByDocument[docId]
+            ? { expiresAt: new Date(`${expiryByDocument[docId]}T00:00:00.000Z`).toISOString() }
+            : {})
+        })
       });
       const data = await res.json() as { message: string };
       showToast(data.message ?? (action === "approve" ? "Document approved." : "Document rejected."), res.ok);
@@ -181,24 +187,36 @@ export function VerificationQueue() {
                         </p>
                       </div>
                     </div>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem" }}>
+                      Expiry (if applicable)
+                      <input
+                        type="date"
+                        value={expiryByDocument[doc.id] ?? ""}
+                        onChange={(event) => setExpiryByDocument((current) => ({ ...current, [doc.id]: event.target.value }))}
+                        disabled={processing?.startsWith(doc.id)}
+                      />
+                    </label>
                     <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
                       <button
                         onClick={() => void handleAction(doc.id, "approve")}
-                        disabled={processing === doc.id + "approve"}
+                        // L-2 FIX: Disable BOTH buttons when ANY action is in-flight for this doc.
+                        // Previously only the approve button was disabled during approve,
+                        // allowing concurrent conflicting actions on the same document.
+                        disabled={processing?.startsWith(doc.id)}
                         style={{
                           padding: "7px 18px", borderRadius: "9px", border: "none", cursor: "pointer",
                           background: "#16a34a", color: "#fff", fontWeight: 700, fontSize: "0.85rem",
-                          opacity: processing === doc.id + "approve" ? 0.6 : 1
+                          opacity: processing?.startsWith(doc.id) ? 0.6 : 1
                         }}>
                         {processing === doc.id + "approve" ? "..." : "✓ Approve"}
                       </button>
                       <button
                         onClick={() => void handleAction(doc.id, "reject")}
-                        disabled={processing === doc.id + "reject"}
+                        disabled={processing?.startsWith(doc.id)}
                         style={{
                           padding: "7px 18px", borderRadius: "9px", border: "1px solid #ef4444", cursor: "pointer",
                           background: "transparent", color: "#ef4444", fontWeight: 700, fontSize: "0.85rem",
-                          opacity: processing === doc.id + "reject" ? 0.6 : 1
+                          opacity: processing?.startsWith(doc.id) ? 0.6 : 1
                         }}>
                         {processing === doc.id + "reject" ? "..." : "✕ Reject"}
                       </button>

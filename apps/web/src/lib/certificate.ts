@@ -27,8 +27,8 @@ function measureTextWidth(text: string, size: number, font: "F1" | "F2" | "F3") 
   for (let i = 0; i < text.length; i++) {
     w += TIMES_WIDTHS[text[i]] ?? 500;
   }
-  if (font === 'F2') w *= 1.05; // bold is slightly wider
-  if (font === 'F3') w *= 1.02; // italic
+  if (font === 'F2') w *= 1.05;
+  if (font === 'F3') w *= 1.02;
   return (w / 1000) * size;
 }
 
@@ -92,120 +92,131 @@ function drawLine(x1: number, y1: number, x2: number, y2: number, color: [number
 }
 
 function drawRibbons(cx: number, cy: number) {
-  // Crimson ribbons falling from the seal
   return [
-    `0.72 0.11 0.11 rg`, // Crimson red
-    // Left ribbon tail
+    `0.72 0.11 0.11 rg`,
     `${cx - 15} ${cy - 20} m`,
     `${cx - 45} ${cy - 110} l`,
-    `${cx - 30} ${cy - 120} l`,
-    `${cx - 15} ${cy - 105} l`,
-    `${cx} ${cy - 120} l`,
+    `${cx - 30} ${cy - 105} l`,
+    `${cx - 15} ${cy - 120} l`,
+    `${cx - 5} ${cy - 20} l`,
     `f`,
-    // Right ribbon tail
     `${cx + 15} ${cy - 20} m`,
     `${cx + 45} ${cy - 110} l`,
-    `${cx + 30} ${cy - 120} l`,
-    `${cx + 15} ${cy - 105} l`,
-    `${cx} ${cy - 120} l`,
+    `${cx + 30} ${cy - 105} l`,
+    `${cx + 15} ${cy - 120} l`,
+    `${cx + 5} ${cy - 20} l`,
     `f`
   ].join("\n");
 }
 
 function drawSeal(cx: number, cy: number, r: number) {
-  const cmds = [];
-  // Golden starburst background
-  cmds.push(`0.83 0.69 0.22 rg`);
+  const cmds: string[] = [];
+  cmds.push(`0.83 0.68 0.21 rg`);
   cmds.push(`${cx + r} ${cy} m`);
-  const points = 40;
-  for (let i = 1; i <= points * 2; i++) {
-    const angle = (i * Math.PI) / points;
-    const rad = i % 2 === 0 ? r : r * 0.85;
-    cmds.push(`${(cx + rad * Math.cos(angle)).toFixed(2)} ${(cy + rad * Math.sin(angle)).toFixed(2)} l`);
+  for (let i = 0; i <= 360; i += 10) {
+    const rad = (i * Math.PI) / 180;
+    const starR = i % 20 === 0 ? r + 5 : r - 2;
+    const x = cx + starR * Math.cos(rad);
+    const y = cy + starR * Math.sin(rad);
+    cmds.push(`${x.toFixed(2)} ${y.toFixed(2)} l`);
   }
   cmds.push(`f`);
-  
-  // Inner navy circle
-  cmds.push(`0.09 0.19 0.35 rg`);
-  cmds.push(`${cx + r * 0.75} ${cy} m`);
-  for (let i = 1; i <= 40; i++) {
-    const angle = (i * Math.PI) / 20;
-    const rad = r * 0.75;
-    cmds.push(`${(cx + rad * Math.cos(angle)).toFixed(2)} ${(cy + rad * Math.sin(angle)).toFixed(2)} l`);
+  cmds.push(`1 0.84 0 rg`);
+  cmds.push(`${cx + r - 5} ${cy} m`);
+  for (let i = 0; i <= 360; i += 10) {
+    const rad = (i * Math.PI) / 180;
+    const x = cx + (r - 5) * Math.cos(rad);
+    const y = cy + (r - 5) * Math.sin(rad);
+    cmds.push(`${x.toFixed(2)} ${y.toFixed(2)} l`);
   }
   cmds.push(`f`);
-  
-  // Very inner white circle
-  cmds.push(`1 1 1 rg`);
-  cmds.push(`${cx + r * 0.71} ${cy} m`);
-  for (let i = 1; i <= 40; i++) {
-    const angle = (i * Math.PI) / 20;
-    const rad = r * 0.71;
-    cmds.push(`${(cx + rad * Math.cos(angle)).toFixed(2)} ${(cy + rad * Math.sin(angle)).toFixed(2)} l`);
-  }
-  cmds.push(`f`);
-
-  // Gold text inside the seal
-  cmds.push(drawCenteredText("OFFICIAL", cx, cy + 5, 8, 'F2', [212, 175, 55]));
-  cmds.push(drawCenteredText("SEAL", cx, cy - 5, 8, 'F2', [212, 175, 55]));
-  
+  cmds.push(drawCenteredText("NHVR", cx, cy + 10, 16, 'F2', [23, 48, 88]));
+  cmds.push(drawCenteredText("SAFETY", cx, cy - 6, 12, 'F2', [23, 48, 88]));
+  cmds.push(drawCenteredText("PASSED", cx, cy - 20, 10, 'F1', [184, 134, 11]));
   return cmds.join("\n");
 }
 
-function drawSignature(x: number, y: number) {
-  return [
-    `0.1 0.1 0.4 RG 1.5 w`,
-    `${x} ${y + 12} m`,
-    `${x + 10} ${y + 25} ${x + 12} ${y + 2} ${x + 20} ${y + 8} c`,
-    `${x + 25} ${y + 18} ${x + 35} ${y + 2} ${x + 45} ${y + 10} c`,
-    `${x + 55} ${y + 18} ${x + 65} ${y + 5} ${x + 80} ${y + 15} c`,
-    `S`
-  ].join("\n");
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.replace(/>$/, "");
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < clean.length; i += 2) {
+    bytes[i / 2] = parseInt(clean.substring(i, i + 2), 16);
+  }
+  return bytes;
 }
 
-export function createCertificatePdf(input: {
-  organizationName: string;
+function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
+  let totalLength = 0;
+  for (const arr of arrays) totalLength += arr.length;
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const arr of arrays) {
+    result.set(arr, offset);
+    offset += arr.length;
+  }
+  return result;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+export function buildCertificatePdf(input: {
   fullName: string;
   completionId: string;
   issuedAt: string;
   verificationUrl: string;
+  licenceClass?: string;
+  issuingState?: string;
+  depotLocation?: string;
+  organizationName: string;
 }) {
-  const commands = [
-    // Background and formal borders (Landscape 792 x 612)
-    drawRect(0, 0, 792, 612, [255, 255, 255]),
-    drawRect(30, 30, 732, 552, undefined, [23, 48, 88], 5), // Thick navy border
-    drawRect(38, 38, 716, 536, undefined, [212, 175, 55], 1.5), // Thin gold border
-    drawRect(44, 44, 704, 524, [253, 251, 247], [23, 48, 88], 1), // Ivory bg, thin navy border
+  const licenceInfo = `LICENCE CLASS: ${input.licenceClass || "HC"} (${input.issuingState || "VIC"})  •  DEPOT HUB: ${input.depotLocation || "Melbourne Hub"}`;
+  const logoJpgBytes = hexToBytes(bntLogoHex);
 
-    // Organization Logo
+  const commands = [
+    drawRect(0, 0, 792, 612, [255, 255, 255]),
+    drawRect(30, 30, 732, 552, undefined, [23, 48, 88], 5),
+    drawRect(38, 38, 716, 536, undefined, [212, 175, 55], 1.5),
+    drawRect(44, 44, 704, 524, [253, 251, 247], [23, 48, 88], 1),
+
+    // Organization Logo (237x92)
     `q`,
-    `180 0 0 60 306 480 cm`,
+    `180 0 0 70 306 482 cm`,
     `/Logo Do`,
     `Q`,
 
     // Title
-    drawCenteredText("CERTIFICATE OF COMPLETION", 396, 440, 42, 'F2', [184, 134, 11]),
+    drawCenteredText("NHVR HVNL DRIVER INDUCTION CERTIFICATE", 396, 442, 22, 'F2', [184, 134, 11]),
 
     // Subtitle
-    drawCenteredText("THIS IS TO CERTIFY THAT", 396, 390, 14, 'F1', [100, 100, 100]),
+    drawCenteredText("THIS IS TO CERTIFY THAT", 396, 404, 12, 'F1', [100, 100, 100]),
 
     // Nameline
-    drawCenteredText(input.fullName, 396, 325, 48, 'F3', [0, 0, 0]),
-    drawLine(196, 305, 596, 305, [184, 134, 11], 1),
+    drawCenteredText(input.fullName, 396, 352, 34, 'F3', [0, 0, 0]),
+    drawLine(196, 335, 596, 335, [184, 134, 11], 1.5),
+
+    // Licence & Depot Info
+    drawCenteredText(licenceInfo, 396, 308, 11, 'F2', [30, 58, 95]),
 
     // Body Text
-    drawCenteredText("has successfully completed all requirements of the comprehensive Induction Training Program", 396, 260, 16, 'F1', [40, 40, 40]),
-    drawCenteredText("and has demonstrated exceptional understanding of the safety, compliance, and operational standards.", 396, 236, 16, 'F1', [40, 40, 40]),
+    drawCenteredText("has successfully completed the NHVR Safety Management System (SMS) Heavy Vehicle Induction", 396, 272, 13, 'F2', [40, 40, 40]),
+    drawCenteredText("demonstrating competency in Chain of Responsibility (CoR), Fatigue Rules, Load Restraint 2018 & Pre-Start Checks.", 396, 250, 12, 'F1', [60, 60, 60]),
 
     // Date Details (Left)
-     drawLeftText("Date of Issuance:", 100, 150, 10, 'F1', [100, 100, 100]),
-     drawLeftText(formatPdfDate(input.issuedAt), 100, 130, 14, 'F2', [0, 0, 0]),
-     drawLine(100, 125, 250, 125, [0, 0, 0], 1),
+    drawLeftText("Date of Issuance:", 100, 150, 10, 'F1', [100, 100, 100]),
+    drawLeftText(formatPdfDate(input.issuedAt), 100, 130, 13, 'F2', [0, 0, 0]),
+    drawLine(100, 124, 250, 124, [0, 0, 0], 1),
 
-    // Signature Area (Right)
-    drawSignature(600, 130),
-    drawRightText("Authorized Official", 692, 110, 10, 'F1', [100, 100, 100]),
-    drawLine(542, 125, 692, 125, [0, 0, 0], 1),
+    // Organization Issuer Info (Right)
+    drawRightText("Issued By:", 692, 150, 10, 'F1', [100, 100, 100]),
+    drawRightText(input.organizationName, 692, 130, 13, 'F2', [0, 0, 0]),
+    drawLine(542, 124, 692, 124, [0, 0, 0], 1),
 
     // Verification Box (Top Right)
     drawRect(618, 525, 110, 30, [255, 255, 255], [200, 200, 200], 0.5),
@@ -214,32 +225,53 @@ export function createCertificatePdf(input: {
 
     // Center Gold Seal & Ribbons
     drawRibbons(396, 140),
-    drawSeal(396, 140, 46)
+    drawSeal(396, 140, 44)
   ].join("\n");
 
-  const objects = [
-    "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
-    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
-    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> /XObject << /Logo 8 0 R >> >> >> endobj",
-    `4 0 obj << /Length ${new TextEncoder().encode(commands).length} >> stream\n${commands}\nendstream endobj`,
-    "5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >> endobj",
-    "6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >> endobj",
-    "7 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Times-Italic >> endobj",
-    `8 0 obj << /Type /XObject /Subtype /Image /Width 300 /Height 99 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${bntLogoHex.length} >> stream\n${bntLogoHex}\nendstream endobj`
-  ];
+  const encoder = new TextEncoder();
+  const cmdBytes = encoder.encode(commands);
 
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  for (const object of objects) {
-    offsets.push(new TextEncoder().encode(pdf).length);
-    pdf += `${object}\n`;
+  const obj1 = encoder.encode("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n");
+  const obj2 = encoder.encode("2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n");
+  const obj3 = encoder.encode("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> /XObject << /Logo 8 0 R >> >> >> endobj\n");
+  const obj4 = concatUint8Arrays([
+    encoder.encode(`4 0 obj << /Length ${cmdBytes.length} >> stream\n`),
+    cmdBytes,
+    encoder.encode("\nendstream endobj\n")
+  ]);
+  const obj5 = encoder.encode("5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >> endobj\n");
+  const obj6 = encoder.encode("6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >> endobj\n");
+  const obj7 = encoder.encode("7 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Times-Italic >> endobj\n");
+  const obj8 = concatUint8Arrays([
+    encoder.encode(`8 0 obj << /Type /XObject /Subtype /Image /Width 237 /Height 92 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpgBytes.length} >> stream\n`),
+    logoJpgBytes,
+    encoder.encode("\nendstream endobj\n")
+  ]);
+
+  const objects = [obj1, obj2, obj3, obj4, obj5, obj6, obj7, obj8];
+
+  const pdfHeader = encoder.encode("%PDF-1.4\n");
+  let currentOffset = pdfHeader.length;
+  const offsets: number[] = [0];
+
+  const pdfChunks: Uint8Array[] = [pdfHeader];
+
+  for (const obj of objects) {
+    offsets.push(currentOffset);
+    pdfChunks.push(obj);
+    currentOffset += obj.length;
   }
-  const xrefOffset = new TextEncoder().encode(pdf).length;
-  pdf += `xref\n0 ${objects.length + 1}\n`;
-  pdf += "0000000000 65535 f \n";
+
+  const xrefOffset = currentOffset;
+  let xrefStr = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
   for (let index = 1; index < offsets.length; index += 1) {
-    pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+    xrefStr += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
   }
-  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return btoa(unescape(encodeURIComponent(pdf)));
+  xrefStr += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  pdfChunks.push(encoder.encode(xrefStr));
+  const fullBuffer = concatUint8Arrays(pdfChunks);
+  return bytesToBase64(fullBuffer);
 }
+
+export const createCertificatePdf = buildCertificatePdf;

@@ -1,5 +1,4 @@
 import "./loadEnv.js";
-import { createClient } from "@supabase/supabase-js";
 import { app } from "./app.js";
 
 const port = Number(process.env.PORT ?? 4000);

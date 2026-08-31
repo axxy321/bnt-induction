@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
+    "node-fetch": "^2.7.0",
     "pg": "^8.22.0",
     "ws": "^8.21.1"
   }
