@@ -27,9 +27,11 @@ export default defineConfig(() => {
             }
           ]
         },
-        // Do not cache authenticated Supabase responses or signed document URLs.
-        // Workbox still precaches the static application shell.
-        workbox: {}
+        workbox: {
+          cleanupOutdatedCaches: true,
+          skipWaiting: true,
+          clientsClaim: true
+        }
       })
     ],
     build: {
