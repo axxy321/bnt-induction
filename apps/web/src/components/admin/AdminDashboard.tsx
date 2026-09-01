@@ -75,14 +75,17 @@ export function AdminDashboard({
 
       {/* Navigation Tabs */}
       <div
-        className="glass"
+        className="glass admin-nav-tabs"
         style={{
           padding: "8px 12px",
           borderRadius: "14px",
           marginBottom: "24px",
           display: "flex",
           gap: "8px",
-          alignItems: "center"
+          alignItems: "center",
+          overflowX: "auto",
+          maxWidth: "100%",
+          WebkitOverflowScrolling: "touch"
         }}
       >
         <button

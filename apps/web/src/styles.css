@@ -1749,3 +1749,112 @@ td small {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* ==========================================================================
+   MOBILE-FIRST & UNIVERSAL RESPONSIVE BREAKPOINTS (ALL PHONES & TABLETS)
+   ========================================================================== */
+
+/* Touch-friendly inputs to prevent iOS Safari auto-zoom */
+@media screen and (max-width: 768px) {
+  input, select, textarea, button {
+    font-size: 16px !important;
+  }
+}
+
+/* Tablet & Mobile Screens (<= 992px) */
+@media (max-width: 992px) {
+  .app-shell {
+    padding: 12px !important;
+  }
+
+  .header-topbar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+    padding: 16px !important;
+    border-radius: 20px !important;
+  }
+
+  .header-topbar > div {
+    width: 100% !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+  }
+
+  .split-panel {
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+    padding: 16px !important;
+    border-radius: 24px !important;
+  }
+}
+
+/* Smartphone Screens (<= 640px) */
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 8px !important;
+  }
+
+  /* Glass cards on mobile */
+  .glass, .glass-inner, .panel-hero, .panel-form, .content-panel {
+    padding: 16px !important;
+    border-radius: 18px !important;
+  }
+
+  /* Admin nav tabs horizontal scrolling */
+  .admin-nav-tabs button {
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Admin metrics cards grid on mobile */
+  div[style*="gridTemplateColumns"],
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  /* Table responsiveness wrapper */
+  table {
+    display: block !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Touch-friendly buttons */
+  button, .btn--primary, input[type="submit"] {
+    min-height: 44px !important;
+    padding: 10px 16px !important;
+  }
+
+  /* Header title sizing */
+  .topbar h1, h2 {
+    font-size: 1.25rem !important;
+  }
+
+  /* Wizard navigation buttons */
+  .wizard-footer, .inline-row {
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .wizard-footer button, .inline-row button {
+    width: 100% !important;
+  }
+}
+
+/* Ultra Small Phones (iPhone SE, Galaxy Fold <= 380px) */
+@media (max-width: 380px) {
+  .glass {
+    padding: 12px !important;
+  }
+  .brand-logo {
+    width: 120px !important;
+  }
+  div[style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+

@@ -113,14 +113,15 @@ function AppContent() {
     <div className="app-shell" style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Global Header */}
       <header
-        className="glass"
+        className="glass header-topbar"
         style={{
-          padding: "14px 24px",
-          margin: "12px 16px 24px",
+          padding: "16px 20px",
           borderRadius: "16px",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between"
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px"
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
