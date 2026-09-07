@@ -1,6 +1,6 @@
 import { Session } from "@supabase/supabase-js";
 import { createCertificatePdf } from "./certificate";
-import { apiBaseUrl, organizationName, supabase } from "./supabase";
+import { apiBaseUrl, organizationName, supabase, supabaseUrl, supabaseAnonKey } from "./supabase";
 import {
   AdminOverview,
   AuditLog,
@@ -694,19 +694,76 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input)
       });
+      return;
     } catch {
-      // Fallback to RPC if backend is unavailable
-      const { error } = await supabase.rpc("create_user_by_admin", {
-        new_email: input.email,
-        new_password: input.password,
-        new_full_name: input.fullName,
-        new_phone: input.phone,
-        new_address: input.address,
-        new_language: input.preferredLanguage
+      // 1. Try RPC if available
+      try {
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc("create_user_by_admin", {
+          new_email: input.email,
+          new_password: input.password,
+          new_full_name: input.fullName,
+          new_phone: input.phone,
+          new_address: input.address,
+          new_language: input.preferredLanguage
+        });
+        if (!rpcErr && rpcRes) return;
+      } catch {}
+
+      // 2. Direct Supabase Auth & DB fallback for client-only / Vercel hosting
+      const { createClient } = await import("@supabase/supabase-js");
+      const tempAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { persistSession: false, autoRefreshToken: false }
       });
-      if (error) {
-        throw new Error(error.message || "Failed to create driver via fallback RPC.");
+
+      const { data: authData, error: authErr } = await tempAuthClient.auth.signUp({
+        email: input.email.trim(),
+        password: input.password,
+        options: {
+          data: {
+            role: "driver",
+            full_name: input.fullName.trim()
+          }
+        }
+      });
+
+      if (authErr) {
+        if (authErr.message.toLowerCase().includes("rate limit")) {
+          throw new Error("Supabase auth email rate limit reached. Please wait 60 seconds before creating another driver account.");
+        }
+        throw new Error(authErr.message || "Failed to create driver account.");
       }
+
+      const userId = authData.user?.id;
+      if (!userId) {
+        throw new Error("Failed to register driver user ID.");
+      }
+
+      // Upsert profile as authenticated Admin
+      await supabase.from("profiles").upsert({
+        id: userId,
+        email: input.email.trim(),
+        full_name: input.fullName.trim(),
+        phone: input.phone || "",
+        address: input.address || "",
+        preferred_language: input.preferredLanguage || "English",
+        role: "driver",
+        updated_at: new Date().toISOString()
+      }, { onConflict: "id" });
+
+      // Upsert drivers table entry
+      await supabase.from("drivers").upsert({
+        user_id: userId,
+        status: "Not Started"
+      }, { onConflict: "user_id" });
+
+      // Upsert induction progress entry
+      await supabase.from("induction_progress").upsert({
+        user_id: userId,
+        current_step: 1,
+        completion_percentage: 0,
+        completed_step_ids: [],
+        updated_at: new Date().toISOString()
+      }, { onConflict: "user_id" });
     }
   },
 

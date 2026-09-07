@@ -83,6 +83,22 @@ export function DriverTable({
     }
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const blob = await onExportReport("csv");
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bnt-driver-compliance-report-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err?.message || "CSV export failed.");
+    }
+  };
+
   return (
     <div className="glass" style={{ padding: "28px", borderRadius: "20px" }}>
       {/* Table Toolbar */}
@@ -115,7 +131,7 @@ export function DriverTable({
           </button>
           <button
             type="button"
-            onClick={() => onExportReport("csv")}
+            onClick={handleExportCSV}
             style={{
               padding: "9px 16px",
               borderRadius: "8px",
