@@ -11,3 +11,4 @@ apps/api/.env
 apps/web/.env
 e2e-tests/
 .vercel
+/*.png

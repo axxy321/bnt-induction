@@ -1,4 +1,5 @@
-import { useState } from "react";
+import React, { useState } from "react";
+import { Award, Download, Star, Check } from "lucide-react";
 import { CertificateRecord, DriverFeedback, DriverProfile } from "../../types";
 import bntLogo from "../../assets/bnt-logistics-logo.png";
 
@@ -56,7 +57,9 @@ export function Step6Certificate({
 
   return (
     <div className="glass" style={{ padding: "32px", borderRadius: "20px", maxWidth: "760px", margin: "0 auto", textAlign: "center" }}>
-      <div style={{ fontSize: "3rem", marginBottom: "12px" }}>🎖️</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
+        <Award className="w-16 h-16 text-amber-400" />
+      </div>
       <h3 style={{ fontSize: "1.6rem", fontWeight: 700, margin: "0 0 8px" }}>
         Induction Successfully Completed!
       </h3>
@@ -119,7 +122,10 @@ export function Step6Certificate({
             boxShadow: "0 4px 12px rgba(22, 163, 74, 0.25)"
           }}
         >
-          {downloading ? "Generating PDF Certificate..." : "📥 Download Official PDF Certificate"}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+            <Download style={{ width: 18, height: 18 }} />
+            {downloading ? "Generating PDF Certificate..." : "Download Official PDF Certificate"}
+          </span>
         </button>
       </div>
 
@@ -139,8 +145,8 @@ export function Step6Certificate({
         </p>
 
         {feedbackSaved ? (
-          <div style={{ padding: "10px 14px", borderRadius: "8px", background: "rgba(34, 197, 94, 0.1)", color: "#22c55e", fontSize: "0.85rem", fontWeight: 600 }}>
-            ✓ Thank you! Your feedback has been submitted to the compliance team.
+          <div style={{ padding: "10px 14px", borderRadius: "8px", background: "rgba(34, 197, 94, 0.1)", color: "#22c55e", fontSize: "0.85rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+            <Check className="w-4 h-4" /> Thank you! Your feedback has been submitted to the compliance team.
           </div>
         ) : (
           <div>
@@ -154,12 +160,17 @@ export function Step6Certificate({
                   style={{
                     background: "transparent",
                     border: "none",
-                    fontSize: "1.4rem",
-                    cursor: "pointer",
-                    opacity: star <= rating ? 1 : 0.3
+                    padding: "2px",
+                    cursor: "pointer"
                   }}
                 >
-                  ⭐
+                  <Star
+                    className={`w-6 h-6 ${
+                      star <= rating
+                        ? "text-amber-400 fill-amber-400"
+                        : "text-slate-300 fill-transparent"
+                    }`}
+                  />
                 </button>
               ))}
             </div>

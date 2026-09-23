@@ -255,3 +255,154 @@ export interface InductionVersionRecord {
   isCurrent: boolean;
   createdAt: string;
 }
+
+// ============================================================
+// BNT LOGISTICS COMPLIANCE & FLEET MANAGEMENT TYPES
+// ============================================================
+
+export type AuditCategory = "Transport" | "Work Health & Safety" | "Operational Risk" | "Fleet Compliance";
+export type AuditStatus = "Passed" | "In Progress" | "No Attempt" | "Action Required";
+
+export interface ComplianceAudit {
+  id: string;
+  name: string;
+  category: AuditCategory;
+  assignedModule: string;
+  status: AuditStatus;
+  attemptsCount: number;
+  commentsCount: number;
+  description: string;
+  lastAttemptDate?: string | null;
+}
+
+export type SOPCategory = "SOP" | "Policy & Procedure" | "Licensing" | "Product Inductions";
+export type SOPStatus = "Passed" | "In Progress" | "No Attempt" | "Expired";
+
+export interface SOPItem {
+  id: string;
+  code: string;
+  name: string;
+  category: SOPCategory;
+  isMandatory: boolean;
+  dueDate?: string | null;
+  status: SOPStatus;
+  contentSummary: string;
+  videoUrl?: string;
+  quizQuestionsCount?: number;
+}
+
+export type ComplianceDocCategory = "Licence" | "Insurance" | "Certificates" | "SLA / Contract";
+export type ComplianceDocStatus = "Approved" | "Pending" | "Expired" | "Action Required" | "Not Submitted";
+
+export interface ComplianceDocumentRequirement {
+  id: string;
+  name: string;
+  category: ComplianceDocCategory;
+  isMandatory: boolean;
+  expiryDate: string | null;
+  status: ComplianceDocStatus;
+  historyStatus: string;
+  uploadedFileUrl?: string | null;
+  uploadedFileName?: string | null;
+  uploadedAt?: string | null;
+  rejectionReason?: string | null;
+}
+
+export interface VehicleRecord {
+  id: string;
+  rego: string;
+  makeModel: string;
+  bodyType: string;
+  branchName: string;
+  driverNumber: string;
+  driverName: string;
+  regoExpiryDate: string;
+  dgExpiryDate?: string | null;
+  scbaServiceDueDate?: string | null;
+  vehicleCheckApproved: boolean;
+  regoCheckApproved: boolean;
+  status: "Active" | "Inactive" | "Maintenance Required";
+  qrPassCode: string;
+  contactNumber?: string;
+}
+
+export interface ComplianceOverview {
+  complianceScore: number;
+  auditsCount: { total: number; completed: number; pending: number };
+  sopsCount: { total: number; completed: number; pending: number };
+  documentsCount: { total: number; approved: number; expiringSoon: number; actionRequired: number };
+  vehiclesCount: { total: number; active: number };
+}
+
+export interface ContractorCompanyRecord {
+  id: string;
+  companyName: string;
+  tradingName: string;
+  abn: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  address: string;
+  nhvasAccreditation: "Basic Fatigue" | "Mass Management" | "Maintenance Management" | "None";
+  nhvasNumber: string;
+  publicLiabilityPolicy: string;
+  publicLiabilityExpiry: string;
+  workersCompPolicy: string;
+  workersCompExpiry: string;
+  primaryDepot: string;
+  status: "Compliant" | "Pending Review" | "Suspended";
+}
+
+export type IncidentCategory = "Near Miss" | "Vehicle Defect" | "Spill / Leak" | "Safety Hazard" | "Injury / Illness";
+export type IncidentSeverity = "Low" | "Medium" | "High" | "Critical";
+
+export interface SafetyIncidentRecord {
+  id: string;
+  title: string;
+  category: IncidentCategory;
+  severity: IncidentSeverity;
+  location: string;
+  description: string;
+  immediateActionsTaken: string;
+  reportedBy: string;
+  reportedAt: string;
+  photoFileName?: string;
+  status: "Open" | "Under Review" | "Resolved";
+  riskScore: number;
+}
+
+export interface SiteCheckinRecord {
+  id: string;
+  depotName: string;
+  driverName: string;
+  vehicleRego: string;
+  checkinTime: string;
+  checkoutTime?: string | null;
+  hoursDrivenToday: number;
+  hoursRestedLast24h: number;
+  fitnessDeclaration: boolean;
+  status: "Active" | "Checked Out";
+}
+
+export interface PreTripCheckItem {
+  id: string;
+  category: "Tyres & Wheels" | "Brakes & Air" | "Lights & Visual" | "Coupling & Pin" | "Load Restraint" | "Fluids & Engine";
+  label: string;
+  status: "Pass" | "Defect";
+  notes?: string;
+}
+
+export interface PreTripInspectionRecord {
+  id: string;
+  driverId: string;
+  driverName: string;
+  vehicleRego: string;
+  odometer: string;
+  trailerId?: string;
+  inspectedAt: string;
+  overallStatus: "Fit for Duty" | "Minor Defect" | "Out of Service";
+  items: PreTripCheckItem[];
+  driverSignature: string;
+}
+
+

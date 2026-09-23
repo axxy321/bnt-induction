@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CheckCircle2, ArrowRight, Check } from "lucide-react";
 import { LearningSectionProgress } from "../../types";
 import { VideoPlayer } from "../VideoPlayer";
 
@@ -57,18 +58,16 @@ export function Step3Modules({ modules, onToggleModule, onStartModule, onContinu
           return (
             <button
               key={mod.sectionId || idx}
-              onClick={() => {
-                setActiveModuleIndex(idx);
-                onStartModule?.(mod);
-              }}
+              type="button"
+              onClick={() => setActiveModuleIndex(idx)}
               style={{
-                padding: "10px 16px",
+                padding: "8px 16px",
                 borderRadius: "10px",
                 border: isActive
                   ? "2px solid #2563eb"
                   : isDone
-                  ? "1px solid rgba(34, 197, 94, 0.4)"
-                  : "1px solid #cbd5e1",
+                  ? "1.5px solid #16a34a"
+                  : "1px solid var(--border, #cbd5e1)",
                 background: isActive
                   ? "#2563eb"
                   : isDone
@@ -90,8 +89,8 @@ export function Step3Modules({ modules, onToggleModule, onStartModule, onContinu
                 transition: "all 0.18s ease"
               }}
             >
-              <span style={{ color: isActive ? "#ffffff" : isDone ? "#166534" : "#1e293b", fontWeight: 800 }}>
-                {isDone ? "✅" : `${idx + 1}.`}
+              <span style={{ color: isActive ? "#ffffff" : isDone ? "#166534" : "#1e293b", fontWeight: 800, display: "inline-flex", alignItems: "center" }}>
+                {isDone ? <CheckCircle2 className="w-4 h-4 text-emerald-600 inline" /> : `${idx + 1}.`}
               </span>
               <span style={{ color: isActive ? "#ffffff" : isDone ? "#166534" : "#1e293b", fontWeight: 700 }}>
                 {mod.title.length > 24 ? mod.title.slice(0, 24) + "…" : mod.title}
@@ -114,8 +113,8 @@ export function Step3Modules({ modules, onToggleModule, onStartModule, onContinu
               </h4>
             </div>
             {currentModule.completed && (
-              <span style={{ background: "rgba(34, 197, 94, 0.15)", color: "#16a34a", fontWeight: 800, fontSize: "0.82rem", padding: "6px 14px", borderRadius: "20px" }}>
-                ✓ COMPLETED
+              <span style={{ background: "rgba(34, 197, 94, 0.15)", color: "#16a34a", fontWeight: 800, fontSize: "0.82rem", padding: "6px 14px", borderRadius: "20px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <Check className="w-4 h-4" /> COMPLETED
               </span>
             )}
           </div>
@@ -161,9 +160,9 @@ export function Step3Modules({ modules, onToggleModule, onStartModule, onContinu
           )}
 
           <div style={{ marginTop: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            {!currentModule.videoUrl && <button
+            <button
               type="button"
-              onClick={() => onToggleModule(currentModule)}
+              onClick={() => void onToggleModule(currentModule)}
               disabled={loading}
               style={{
                 padding: "8px 18px",
@@ -176,8 +175,8 @@ export function Step3Modules({ modules, onToggleModule, onStartModule, onContinu
                 cursor: "pointer"
               }}
             >
-              {currentModule.completed ? "Mark as Incomplete" : "Mark Module Complete ✓"}
-            </button>}
+              {currentModule.completed ? "Mark as Incomplete" : "Mark Module Complete"}
+            </button>
 
             {activeModuleIndex < modules.length - 1 && (
               <button

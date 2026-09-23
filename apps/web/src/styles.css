@@ -1,31 +1,42 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
 
 :root {
-  font-family: "Inter", sans-serif;
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
-  --bg: #f1f5f9;
+  --bg: #f8fafc;
   --bg-elevated: #ffffff;
   --bg-strong: #ffffff;
-  --text: #000000;
-  --input-text: #000000;
-  --muted: #1e293b;
-  --border: #94a3b8;
-  --shadow: 0 18px 60px rgba(0, 0, 0, 0.08);
+  --text: #0f172a;
+  --input-text: #0f172a;
+  --muted: #475569;
+  --border: #cbd5e1;
+  --shadow: 0 20px 50px rgba(0, 0, 0, 0.06);
   --primary: #2563eb;
   --secondary: #0ea5e9;
-  --accent: #16a34a;
+  --accent: #10b981;
+  --font-heading: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 :root[data-theme="dark"], html[data-theme="dark"], body[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #07111f;
-  --bg-elevated: #0f1d33;
-  --bg-strong: #172a48;
+  --bg: #030712;
+  --bg-elevated: #0b1329;
+  --bg-strong: #111c38;
   --text: #f8fafc;
   --input-text: #ffffff;
   --muted: #94a3b8;
-  --border: #2e4468;
-  --shadow: 0 20px 80px rgba(2, 6, 23, 0.45);
+  --border: #1e293b;
+  --shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
+  --font-heading: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 * {
@@ -36,49 +47,54 @@ body {
   margin: 0;
   min-width: 320px;
   background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 30%),
-    radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.1), transparent 28%),
+    radial-gradient(circle at 15% 15%, rgba(16, 185, 129, 0.12), transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(37, 99, 235, 0.14), transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08), transparent 50%),
     var(--bg);
   color: var(--text);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* E2E Light Mode Absolute Black Typography Enforcement */
-html:not([data-theme="dark"]),
-html:not([data-theme="dark"]) body,
-html:not([data-theme="dark"]) p,
-html:not([data-theme="dark"]) span,
-html:not([data-theme="dark"]) label,
-html:not([data-theme="dark"]) div,
-html:not([data-theme="dark"]) li,
-html:not([data-theme="dark"]) h1,
-html:not([data-theme="dark"]) h2,
-html:not([data-theme="dark"]) h3,
-html:not([data-theme="dark"]) h4,
-html:not([data-theme="dark"]) h5,
-html:not([data-theme="dark"]) h6,
-html:not([data-theme="dark"]) td,
-html:not([data-theme="dark"]) th,
-html:not([data-theme="dark"]) strong,
-html:not([data-theme="dark"]) em,
-html:not([data-theme="dark"]) small {
-  color: #000000;
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
 }
 
-html:not([data-theme="dark"]) input,
-html:not([data-theme="dark"]) select,
-html:not([data-theme="dark"]) textarea,
-html:not([data-theme="dark"]) .form-input {
-  font: inherit;
-  color: #000000 !important;
-  background-color: #ffffff !important;
-  border: 1px solid #94a3b8 !important;
+.font-mono {
+  font-family: var(--font-mono);
 }
 
-html:not([data-theme="dark"]) input::placeholder,
-html:not([data-theme="dark"]) textarea::placeholder,
-html:not([data-theme="dark"]) .form-input::placeholder {
-  color: #475569 !important;
-  opacity: 1 !important;
+
+/* Animated Logistics Truck Background & Pan Keyframes */
+@keyframes kenburnsTruck {
+  0% {
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    transform: scale(1.08) translate(-15px, -8px);
+  }
+  100% {
+    transform: scale(1) translate(0, 0);
+  }
+}
+
+@keyframes pulseGlowBeam {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.animate-truck-bg {
+  animation: kenburnsTruck 28s ease-in-out infinite alternate;
+}
+
+.animate-pulse-beam {
+  animation: pulseGlowBeam 4s ease-in-out infinite;
 }
 
 h1, h2, h3, h4, h5, h6, label, p, li {
@@ -198,9 +214,9 @@ button {
 
 .app-shell {
   min-height: 100vh;
-  padding: 24px;
+  padding: 0;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .background-orbs {

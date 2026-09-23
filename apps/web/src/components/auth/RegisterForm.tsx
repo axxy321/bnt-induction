@@ -1,5 +1,6 @@
 import { useState, FormEvent } from "react";
 import { motion } from "framer-motion";
+import { AlertTriangle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { DriverSelfRegisterInput } from "../../types";
 
 interface RegisterFormProps {
@@ -123,7 +124,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
             gap: "10px"
           }}
         >
-          <span style={{ fontSize: "1.2rem" }}>⚠️</span>
+          <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -333,7 +334,10 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
               onClick={() => setShowPassword(!showPassword)}
               style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}
             >
-              {showPassword ? "👁️ Hide Passwords" : "👁️ Show Passwords"}
+              <span className="flex items-center gap-1">
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>{showPassword ? "Hide Passwords" : "Show Passwords"}</span>
+              </span>
             </button>
           </div>
 
@@ -404,7 +408,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
         >
           {loading ? (
             <>
-              <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>🔄</span>
+              <Loader2 style={{ width: 16, height: 16, animation: "spin 1s linear infinite" }} />
               <span>Creating Account & Setting Up Induction...</span>
             </>
           ) : (

@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
+import { Check } from "lucide-react";
 import { DriverBundle, DriverFormInput, DocumentType, QuizQuestion, QuizSubmitResult } from "../../types";
 import { Step1Profile } from "./Step1Profile";
 import { Step2Documents } from "./Step2Documents";
@@ -28,8 +29,8 @@ const stepLabels = [
   "2. AU Documents",
   "3. Safety Modules",
   "4. Knowledge Quiz",
-  "5. Declaration",
-  "6. Certificate"
+  "5. Legal Sign-Off",
+  "6. Site Pass & Cert"
 ];
 
 export function DriverWizard({
@@ -51,24 +52,45 @@ export function DriverWizard({
     ? Math.max(...bundle.progress.completedStepIds)
     : 0;
   const highestAllowedStep = Math.min(6, maxCompletedStep + 1);
+  const progressPercent = Math.round((currentStep / 6) * 100);
 
   return (
-    <div style={{ width: "100%", maxWidth: "960px", margin: "0 auto", padding: "0 16px" }}>
-      {/* Wizard Header / Navigation bar */}
-      <div
-        className="glass"
-        style={{
-          padding: "16px 20px",
-          borderRadius: "16px",
-          marginBottom: "24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "12px"
-        }}
-      >
-        <div style={{ display: "flex", gap: "8px", overflowX: "auto", width: "100%", paddingBottom: "4px" }}>
+    <div className="w-full max-w-5xl mx-auto space-y-6">
+      {/* High-Tech Stepper Header */}
+      <div className="bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/30">
+                BNT Logistics Heavy Vehicle Driver Induction
+              </span>
+            </div>
+            <h2 className="text-xl font-black text-white mt-1 font-heading">
+              {stepLabels[currentStep - 1]}
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <span className="text-xs text-slate-400 font-medium block">Progress</span>
+              <span className="text-emerald-400 font-extrabold font-mono text-sm">{progressPercent}% Complete</span>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-white font-mono shadow-inner">
+              {currentStep}/6
+            </div>
+          </div>
+        </div>
+
+        {/* Progress Bar Line */}
+        <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-blue-500 transition-all duration-500 rounded-full"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+
+        {/* Step Buttons Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1">
           {stepLabels.map((label, idx) => {
             const stepNum = idx + 1;
             const isActive = currentStep === stepNum;
@@ -80,58 +102,39 @@ export function DriverWizard({
                 key={stepNum}
                 onClick={() => isAccessible && onSetStep(stepNum)}
                 disabled={!isAccessible}
-                style={{
-                  flex: 1,
-                  minWidth: "125px",
-                  padding: "10px 14px",
-                  borderRadius: "12px",
-                  border: isActive
-                    ? "2px solid #2563eb"
+                className={`px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-center truncate ${
+                  isActive
+                    ? "bg-emerald-600 text-white shadow-lg shadow-emerald-900/40 border border-emerald-400 scale-[1.02]"
                     : isCompleted
-                    ? "1px solid rgba(34, 197, 94, 0.4)"
-                    : "1px solid #cbd5e1",
-                  background: isActive
-                    ? "#2563eb"
-                    : isCompleted
-                    ? "rgba(34, 197, 94, 0.12)"
-                    : "var(--bg-elevated, #ffffff)",
-                  color: isActive
-                    ? "#ffffff"
-                    : isCompleted
-                    ? "#166534"
-                    : "#1e293b",
-                  fontWeight: isActive || isCompleted ? 800 : 700,
-                  fontSize: "0.84rem",
-                  cursor: isAccessible ? "pointer" : "not-allowed",
-                  textAlign: "center",
-                  whiteSpace: "nowrap",
-                  opacity: !isAccessible ? 0.75 : 1,
-                  boxShadow: isActive ? "0 6px 16px rgba(37,99,235,0.25)" : "none",
-                  transition: "all 0.18s ease"
-                }}
+                    ? "bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-900/50"
+                    : isAccessible
+                    ? "bg-slate-800/80 text-slate-300 border border-slate-700 hover:bg-slate-700/60"
+                    : "bg-slate-900/40 text-slate-500 border border-slate-800/50 cursor-not-allowed opacity-60"
+                }`}
               >
-                {label} {isCompleted && "✓"}
+                <span>{label}</span>
+                {isCompleted && <Check className="w-3.5 h-3.5 ml-1 text-emerald-400 font-bold inline" />}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Active Step Content */}
+      {/* Active Step Container */}
       <AnimatePresence mode="wait">
         <motion.div
           key={currentStep}
-          initial={{ opacity: 0, x: 10 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -10 }}
-          transition={{ duration: 0.2 }}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.25 }}
         >
           {currentStep === 1 && (
             <Step1Profile
               driver={bundle.driver}
               onSave={async (input) => {
+                await onSaveProfile(input);
                 onSetStep(2);
-                onSaveProfile(input).catch((err) => console.error("Profile save background notice:", err));
               }}
               loading={false}
             />
@@ -190,3 +193,4 @@ export function DriverWizard({
     </div>
   );
 }
+

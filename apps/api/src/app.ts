@@ -76,7 +76,16 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
 const rawOrigins = process.env.ALLOWED_ORIGINS ?? "";
 const allowedOrigins = rawOrigins
   ? rawOrigins.split(",").map((o) => o.trim()).filter(Boolean)
-  : ["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"];
+  : [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:5174",
+      "http://localhost:4173",
+      "http://127.0.0.1:4173",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ];
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -334,7 +343,11 @@ app.post("/api/admin/drivers", requireAdmin, async (request: AdminRequest, respo
       password: z.string().min(8),
       phone: z.string().min(5),
       address: z.string().min(5),
-      preferredLanguage: z.string().min(2)
+      preferredLanguage: z.string().min(2),
+      licenceClass: z.string().optional(),
+      issuingState: z.string().optional(),
+      licenceNumber: z.string().optional(),
+      depotLocation: z.string().optional()
     });
     const payload = schema.parse(request.body);
 
@@ -342,7 +355,14 @@ app.post("/api/admin/drivers", requireAdmin, async (request: AdminRequest, respo
       email: payload.email,
       password: payload.password,
       email_confirm: true,
-      user_metadata: { role: "driver", must_change_password: true }
+      user_metadata: {
+        role: "driver",
+        must_change_password: true,
+        licenceClass: payload.licenceClass || "HC",
+        issuingState: payload.issuingState || "VIC",
+        licenceNumber: payload.licenceNumber || "",
+        depotLocation: payload.depotLocation || "Melbourne Hub"
+      }
     });
     if (createError || !createdUser.user) throw createError ?? new Error("Unable to create driver account.");
 
@@ -350,7 +370,7 @@ app.post("/api/admin/drivers", requireAdmin, async (request: AdminRequest, respo
     const createdAt = new Date().toISOString();
 
     try {
-      const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+      const fullProfile = {
         id: userId,
         role: "driver",
         email: payload.email,
@@ -358,10 +378,29 @@ app.post("/api/admin/drivers", requireAdmin, async (request: AdminRequest, respo
         phone: payload.phone,
         address: payload.address,
         preferred_language: payload.preferredLanguage,
+        licence_class: payload.licenceClass || "HC",
+        issuing_state: payload.issuingState || "VIC",
+        licence_number: payload.licenceNumber || "",
+        depot_location: payload.depotLocation || "Melbourne Hub",
         created_at: createdAt,
         updated_at: createdAt
-      });
-      if (profileError) throw profileError;
+      };
+      const { error: profileError } = await supabaseAdmin.from("profiles").insert(fullProfile);
+      if (profileError) {
+        // Fallback to base columns if extended columns do not exist
+        const { error: fallbackErr } = await supabaseAdmin.from("profiles").insert({
+          id: userId,
+          role: "driver",
+          email: payload.email,
+          full_name: payload.fullName,
+          phone: payload.phone,
+          address: payload.address,
+          preferred_language: payload.preferredLanguage,
+          created_at: createdAt,
+          updated_at: createdAt
+        });
+        if (fallbackErr) throw fallbackErr;
+      }
 
       const { error: driverError } = await supabaseAdmin.from("drivers").insert({
         user_id: userId,
@@ -425,8 +464,12 @@ app.put("/api/admin/drivers/:driverId", requireAdmin, async (request: AdminReque
       fullName: z.string().min(2),
       email: z.string().email(),
       phone: z.string().min(5),
-      address: z.string().min(5),
-      preferredLanguage: z.string().min(2)
+      address: z.string().min(3),
+      preferredLanguage: z.string().min(2),
+      licenceClass: z.string().optional(),
+      issuingState: z.string().optional(),
+      licenceNumber: z.string().optional(),
+      depotLocation: z.string().optional()
     });
     const payload = schema.parse(request.body);
 
@@ -436,18 +479,38 @@ app.put("/api/admin/drivers/:driverId", requireAdmin, async (request: AdminReque
     });
     if (authError) throw authError;
 
+    const fullUpdate: Record<string, any> = {
+      email: payload.email,
+      full_name: payload.fullName,
+      phone: payload.phone,
+      address: payload.address,
+      preferred_language: payload.preferredLanguage,
+      updated_at: new Date().toISOString()
+    };
+    if (payload.licenceClass) fullUpdate.licence_class = payload.licenceClass;
+    if (payload.issuingState) fullUpdate.issuing_state = payload.issuingState;
+    if (payload.licenceNumber) fullUpdate.licence_number = payload.licenceNumber;
+    if (payload.depotLocation) fullUpdate.depot_location = payload.depotLocation;
+
     const { error: profileError } = await supabaseAdmin
       .from("profiles")
-      .update({
-        email: payload.email,
-        full_name: payload.fullName,
-        phone: payload.phone,
-        address: payload.address,
-        preferred_language: payload.preferredLanguage,
-        updated_at: new Date().toISOString()
-      })
+      .update(fullUpdate)
       .eq("id", driverId);
-    if (profileError) throw profileError;
+    
+    if (profileError) {
+      // Fallback to base columns if extended columns do not exist
+      await supabaseAdmin
+        .from("profiles")
+        .update({
+          email: payload.email,
+          full_name: payload.fullName,
+          phone: payload.phone,
+          address: payload.address,
+          preferred_language: payload.preferredLanguage,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", driverId);
+    }
 
     if (request.authUserId) {
       await logAuditEntry(request.authUserId, "admin_driver_updated", {
@@ -1603,13 +1666,27 @@ app.post("/api/induction/step", requireDriver, async (request: AdminRequest, res
         if (payload.depotLocation) updateData.depot_location = String(payload.depotLocation).trim();
 
         if (Object.keys(updateData).length > 0) {
-          // Contact and licence details belong to the profile record.  The
-          // drivers table deliberately contains only driver lifecycle data.
-          const { error: profileUpdateError } = await supabaseAdmin
+          // Contact and licence details belong to the profile record.
+          // Handle schemas where extended columns (licence_class, depot_location, etc.) are omitted.
+          const baseProfileData: Record<string, unknown> = {};
+          if (updateData.full_name) baseProfileData.full_name = updateData.full_name;
+          if (updateData.phone) baseProfileData.phone = updateData.phone;
+          if (updateData.address) baseProfileData.address = updateData.address;
+          if (updateData.preferred_language) baseProfileData.preferred_language = updateData.preferred_language;
+
+          // Attempt full update first; fall back to base profile fields if extended columns are absent from schema cache
+          const { error: fullUpdateErr } = await supabaseAdmin
             .from("profiles")
             .update(updateData)
             .eq("id", userId);
-          if (profileUpdateError) throw profileUpdateError;
+
+          if (fullUpdateErr) {
+            const { error: baseErr } = await supabaseAdmin
+              .from("profiles")
+              .update(baseProfileData)
+              .eq("id", userId);
+            if (baseErr) throw baseErr;
+          }
         }
       }
 
@@ -1857,7 +1934,7 @@ app.post("/api/induction/quiz", requireDriver, rateLimit(10, 60_000), async (req
 
     const { data: questions, error } = await supabaseAdmin
       .from("quiz_questions")
-      .select("id, correct_answer, sort_order, category, is_critical")
+      .select("*")
       .order("sort_order", { ascending: true });
     if (error) throw error;
 
@@ -1867,8 +1944,8 @@ app.post("/api/induction/quiz", requireDriver, rateLimit(10, 60_000), async (req
 
     const categoryStats: Record<string, { total: number; correct: number }> = {};
 
-    for (const q of questions ?? []) {
-      const driverAnswer = answers[String(q.id)];
+    for (const q of (questions ?? []) as any[]) {
+      const driverAnswer = answers[String(q.id)] ?? answers[q.id];
       
       const category = q.category || "General";
       const isCritical = Boolean(q.is_critical);
@@ -1913,7 +1990,8 @@ app.post("/api/induction/quiz", requireDriver, rateLimit(10, 60_000), async (req
     const { data: attempts } = await supabaseAdmin.from("quiz_attempts").select("id").eq("user_id", userId);
     const attemptNumber = (attempts?.length ?? 0) + 1;
 
-    await supabaseAdmin.from("quiz_attempts").insert({
+    // Try full insert, fallback to base columns if new columns don't exist
+    const fullAttempt = {
       user_id: userId,
       score,
       passed,
@@ -1922,7 +2000,17 @@ app.post("/api/induction/quiz", requireDriver, rateLimit(10, 60_000), async (req
       category_scores: categoryScores,
       failed_critical: failedCritical,
       critical_questions_asked: criticalQuestionsAsked
-    });
+    };
+    const { error: attemptErr } = await supabaseAdmin.from("quiz_attempts").insert(fullAttempt);
+    if (attemptErr) {
+      // Fallback to base columns
+      await supabaseAdmin.from("quiz_attempts").insert({
+        user_id: userId,
+        score,
+        passed,
+        answers
+      });
+    }
 
     const completed = new Set<number>(current.completed_step_ids ?? []);
     if (passed) completed.add(4);

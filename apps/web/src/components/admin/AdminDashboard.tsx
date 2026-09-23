@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Users, FileCheck, Settings, RefreshCw, CalendarClock, Activity } from "lucide-react";
 import { AdminOverview } from "../../types";
 import { DriverTable } from "./DriverTable";
 import { VerificationQueue } from "../VerificationQueue";
 import { AdminCMS } from "../AdminCMS";
+import { AdminExpiryMatrix } from "./AdminExpiryMatrix";
 
 interface AdminDashboardProps {
   overview: AdminOverview | null;
@@ -29,7 +31,7 @@ export function AdminDashboard({
   onVerifyCertificate,
   loading
 }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"drivers" | "verification" | "cms">("drivers");
+  const [activeTab, setActiveTab] = useState<"drivers" | "verification" | "cms" | "expiries" | "activity">("drivers");
 
   const metrics = overview?.metrics || {
     totalDrivers: 0,
@@ -99,10 +101,13 @@ export function AdminDashboard({
             color: activeTab === "drivers" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
             fontSize: "0.88rem",
-            cursor: "pointer"
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px"
           }}
         >
-          🚚 Driver Management
+          <Users className="w-4 h-4" /> Driver Management
         </button>
         <button
           type="button"
@@ -115,10 +120,13 @@ export function AdminDashboard({
             color: activeTab === "verification" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
             fontSize: "0.88rem",
-            cursor: "pointer"
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px"
           }}
         >
-          📑 Document Verification Queue
+          <FileCheck className="w-4 h-4" /> Document Verification Queue
         </button>
         <button
           type="button"
@@ -131,10 +139,51 @@ export function AdminDashboard({
             color: activeTab === "cms" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
             fontSize: "0.88rem",
-            cursor: "pointer"
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px"
           }}
         >
-          ⚙️ Content Management (CMS)
+          <Settings className="w-4 h-4" /> Content Management (CMS)
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("expiries")}
+          style={{
+            padding: "10px 20px",
+            borderRadius: "10px",
+            border: "none",
+            background: activeTab === "expiries" ? "#1e3a5f" : "transparent",
+            color: activeTab === "expiries" ? "#ffffff" : "var(--color-muted)",
+            fontWeight: 700,
+            fontSize: "0.88rem",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px"
+          }}
+        >
+          <CalendarClock className="w-4 h-4" /> Expiry &amp; Renewals
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("activity")}
+          style={{
+            padding: "10px 20px",
+            borderRadius: "10px",
+            border: "none",
+            background: activeTab === "activity" ? "#1e3a5f" : "transparent",
+            color: activeTab === "activity" ? "#ffffff" : "var(--color-muted)",
+            fontWeight: 700,
+            fontSize: "0.88rem",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px"
+          }}
+        >
+          <Activity className="w-4 h-4" /> Audit &amp; Activity Log
         </button>
 
         <button
@@ -152,9 +201,75 @@ export function AdminDashboard({
             fontSize: "0.82rem"
           }}
         >
-          🔄 Refresh Data
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh Data
         </button>
       </div>
+
+      {/* Tab Panels */}
+      {activeTab === "expiries" && (
+        <AdminExpiryMatrix drivers={overview?.drivers || []} />
+      )}
+
+      {activeTab === "activity" && (
+        <div className="glass" style={{ padding: "28px", borderRadius: "20px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+            <div>
+              <h3 style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 4px" }}>
+                System Activity &amp; Audit Trail
+              </h3>
+              <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+                Immutable compliance event log under NHVR &amp; HVNL regulations.
+              </p>
+            </div>
+            <span style={{ fontSize: "0.8rem", fontWeight: 700, padding: "4px 12px", borderRadius: "999px", background: "rgba(37,99,235,0.1)", color: "#2563eb" }}>
+              {(overview?.recentActivity || []).length} Logged Events
+            </span>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {(overview?.recentActivity || []).length === 0 ? (
+              <div style={{ textAlign: "center", padding: "40px", color: "var(--color-muted)" }}>
+                No recent system activity recorded yet.
+              </div>
+            ) : (
+              (overview?.recentActivity || []).map((log, idx) => (
+                <div
+                  key={log.id || idx}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "12px 16px",
+                    borderRadius: "12px",
+                    background: "var(--bg-elevated, rgba(255,255,255,0.03))",
+                    border: "1px solid var(--border, rgba(255,255,255,0.08))",
+                    gap: "12px",
+                    flexWrap: "wrap"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
+                    <div>
+                      <strong style={{ fontSize: "0.88rem", textTransform: "capitalize" }}>
+                        {log.action.replace(/_/g, " ")}
+                      </strong>
+                      <div className="muted" style={{ fontSize: "0.78rem" }}>
+                        User ID: <span style={{ fontFamily: "monospace" }}>{log.userId.slice(0, 8)}...</span>
+                        {log.metadata && Object.keys(log.metadata).length > 0 && (
+                          <span> • {JSON.stringify(log.metadata).slice(0, 60)}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="muted" style={{ fontSize: "0.78rem", whiteSpace: "nowrap" }}>
+                    {new Date(log.createdAt).toLocaleString("en-AU")}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tab Panels */}
       {activeTab === "drivers" && (

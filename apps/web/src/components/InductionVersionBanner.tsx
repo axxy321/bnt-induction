@@ -17,7 +17,9 @@
  *   - The certificate's induction_version_id differs from the current version
  */
 
-import { InductionVersion } from "../types";
+import React from "react";
+import { AlertTriangle } from "lucide-react";
+import { InductionVersion, DriverProfile } from "../types";
 
 interface InductionVersionBannerProps {
   currentVersion: InductionVersion;
@@ -44,7 +46,9 @@ export function InductionVersionBanner({ currentVersion, certificateVersionLabel
       aria-live="polite"
       aria-label="Induction version update notice"
     >
-      <div className="version-banner__icon" aria-hidden="true">⚠️</div>
+      <div className="version-banner__icon" aria-hidden="true">
+        <AlertTriangle className="w-5 h-5 text-amber-400" />
+      </div>
       <div className="version-banner__body">
         <strong className="version-banner__title">
           Induction Update Required — Version {currentVersion.versionLabel}

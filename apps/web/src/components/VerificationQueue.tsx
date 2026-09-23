@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { FileCheck, CheckCircle2, Clock, Check, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppState } from "../state/AppProvider";
 import { apiBaseUrl, supabase } from "../lib/supabase";
@@ -40,7 +41,20 @@ export function VerificationQueue() {
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
-      if (session?.accessToken) {
+      // 1. Direct Supabase query for client SPA mode
+      const { data: supaDocs, error } = await supabase
+        .from("documents")
+        .select("*, profiles:profiles(full_name, email)")
+        .eq("status", "pending")
+        .order("uploaded_at", { ascending: false });
+
+      if (!error && Array.isArray(supaDocs)) {
+        setDocs(supaDocs as any[]);
+        return;
+      }
+
+      // 2. Fallback to backend proxy if available
+      if (session?.accessToken && apiBaseUrl && apiBaseUrl !== "/api") {
         const res = await fetch(`${apiBaseUrl}/admin/verification-queue`, {
           headers: { Authorization: `Bearer ${session.accessToken}` }
         }).catch(() => null);
@@ -53,13 +67,6 @@ export function VerificationQueue() {
           }
         }
       }
-
-      // Direct Supabase fallback for client SPA mode
-      const { data: supaDocs, error } = await supabase
-        .from("documents")
-        .select("*, profiles:profiles(full_name, email)")
-        .eq("status", "pending")
-        .order("uploaded_at", { ascending: false });
 
       if (error) throw error;
       setDocs((supaDocs as any[]) ?? []);
@@ -107,7 +114,7 @@ export function VerificationQueue() {
         // Direct Supabase fallback
         const updateData: Record<string, any> = {
           status: action === "approve" ? "approved" : "rejected",
-          verified_at: new Date().toISOString()
+          verified_by_admin: action === "approve"
         };
         if (action === "approve" && expiryByDocument[docId]) {
           updateData.expires_at = new Date(`${expiryByDocument[docId]}T00:00:00.000Z`).toISOString();
@@ -190,7 +197,9 @@ export function VerificationQueue() {
 
       {!loading && docs.length === 0 && (
         <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.5 }}>
-          <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>✅</div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
+            <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+          </div>
           <p style={{ fontWeight: 600, margin: 0 }}>No documents pending verification.</p>
           <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>All uploaded documents have been reviewed.</p>
         </div>
@@ -212,8 +221,10 @@ export function VerificationQueue() {
                 </div>
                 <span style={{
                   marginLeft: "auto", padding: "4px 12px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 700,
-                  background: "rgba(217,119,6,0.15)", color: "#d97706"
-                }}>⏳ AWAITING VERIFICATION</span>
+                  background: "rgba(217,119,6,0.15)", color: "#d97706", display: "inline-flex", alignItems: "center", gap: "5px"
+                }}>
+                  <Clock className="w-3.5 h-3.5" /> AWAITING VERIFICATION
+                </span>
               </div>
 
               {/* Documents */}
@@ -224,9 +235,7 @@ export function VerificationQueue() {
                     padding: "12px 16px", borderRadius: "12px", background: "var(--bg-elevated)", border: "1px solid var(--border)", flexWrap: "wrap"
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "1.2rem" }}>
-                        {doc.type === "driver_license" ? "🪪" : doc.type === "medical_certificate" ? "🏥" : "🆔"}
-                      </span>
+                      <FileCheck className="w-5 h-5 text-indigo-400 flex-shrink-0" />
                       <div>
                         <strong style={{ fontSize: "0.88rem" }}>{TYPE_LABELS[doc.type] ?? doc.type}</strong>
                         <p className="muted" style={{ margin: 0, fontSize: "0.78rem" }}>
@@ -234,28 +243,28 @@ export function VerificationQueue() {
                         </p>
                       </div>
                     </div>
-                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem" }}>
+                    <label htmlFor={`doc-expiry-${doc.id}`} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem" }}>
                       Expiry (if applicable)
                       <input
+                        id={`doc-expiry-${doc.id}`}
+                        name={`expiry_${doc.id}`}
                         type="date"
                         value={expiryByDocument[doc.id] ?? ""}
                         onChange={(event) => setExpiryByDocument((current) => ({ ...current, [doc.id]: event.target.value }))}
                         disabled={processing?.startsWith(doc.id)}
+                        autoComplete="off"
                       />
                     </label>
                     <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
                       <button
                         onClick={() => void handleAction(doc.id, "approve")}
-                        // L-2 FIX: Disable BOTH buttons when ANY action is in-flight for this doc.
-                        // Previously only the approve button was disabled during approve,
-                        // allowing concurrent conflicting actions on the same document.
                         disabled={processing?.startsWith(doc.id)}
                         style={{
                           padding: "7px 18px", borderRadius: "9px", border: "none", cursor: "pointer",
                           background: "#16a34a", color: "#fff", fontWeight: 700, fontSize: "0.85rem",
-                          opacity: processing?.startsWith(doc.id) ? 0.6 : 1
+                          opacity: processing?.startsWith(doc.id) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: "4px"
                         }}>
-                        {processing === doc.id + "approve" ? "..." : "✓ Approve"}
+                        {processing === doc.id + "approve" ? "..." : <><Check className="w-4 h-4" /> Approve</>}
                       </button>
                       <button
                         onClick={() => void handleAction(doc.id, "reject")}
@@ -263,9 +272,9 @@ export function VerificationQueue() {
                         style={{
                           padding: "7px 18px", borderRadius: "9px", border: "1px solid #ef4444", cursor: "pointer",
                           background: "transparent", color: "#ef4444", fontWeight: 700, fontSize: "0.85rem",
-                          opacity: processing?.startsWith(doc.id) ? 0.6 : 1
+                          opacity: processing?.startsWith(doc.id) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: "4px"
                         }}>
-                        {processing === doc.id + "reject" ? "..." : "✕ Reject"}
+                        {processing === doc.id + "reject" ? "..." : <><X className="w-4 h-4" /> Reject</>}
                       </button>
                     </div>
                   </div>

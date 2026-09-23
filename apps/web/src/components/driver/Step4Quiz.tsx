@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { QuizQuestion, QuizSubmitResult } from "../../types";
 
 interface Step4QuizProps {
@@ -88,7 +89,11 @@ export function Step4Quiz({ questions, onSubmitQuiz, onContinue, loading }: Step
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-            <span style={{ fontSize: "1.4rem" }}>{result.passed ? "🎉" : "❌"}</span>
+            {result.passed ? (
+              <CheckCircle2 style={{ width: 24, height: 24, color: "#16a34a", flexShrink: 0 }} />
+            ) : (
+              <XCircle style={{ width: 24, height: 24, color: "#dc2626", flexShrink: 0 }} />
+            )}
             <div>
               <strong style={{ fontSize: "1.1rem", color: result.passed ? "#16a34a" : "#dc2626" }}>
                 {result.passed ? "Quiz Passed Successfully!" : "Passing Score Not Achieved"}
@@ -166,18 +171,19 @@ export function Step4Quiz({ questions, onSubmitQuiz, onContinue, loading }: Step
       {errorMsg && (
         <div
           style={{
-            padding: "12px 16px",
-            borderRadius: "10px",
-            background: "rgba(239, 68, 68, 0.12)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            color: "#ef4444",
+            color: "var(--error, #ef4444)",
             marginBottom: "16px",
             fontSize: "0.9rem",
             fontWeight: 600,
-            textAlign: "right"
+            textAlign: "right",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: "6px"
           }}
         >
-          ⚠️ {errorMsg}
+          <AlertTriangle className="w-4 h-4 text-rose-400" />
+          <span>{errorMsg}</span>
         </div>
       )}
 

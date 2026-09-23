@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { CheckCircle2, Info, Shield, Play, Pause } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface VideoPlayerProps {
@@ -213,17 +214,16 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <div
               style={{
-                width: "36px",
-                height: "36px",
+                width: 34,
+                height: 34,
                 borderRadius: "10px",
                 background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
-                fontSize: "1.1rem"
+                justifyContent: "center"
               }}
             >
-              🇦🇺
+              <Shield className="w-4 h-4 text-white" />
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: "0.92rem", color: "#f8fafc" }}>
@@ -243,10 +243,19 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
               fontWeight: 700,
               background: completed ? "rgba(34, 197, 94, 0.2)" : "rgba(37, 99, 235, 0.2)",
               color: completed ? "#4ade80" : "#60a5fa",
-              border: `1px solid ${completed ? "rgba(34, 197, 94, 0.4)" : "rgba(37, 99, 235, 0.4)"}`
+              border: `1px solid ${completed ? "rgba(34, 197, 94, 0.4)" : "rgba(37, 99, 235, 0.4)"}`,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px"
             }}
           >
-            {completed ? "✓ Module Completed" : isPlaying ? "▶ Playing Training Video" : "⏸ Ready to Watch"}
+            {completed ? (
+              <><CheckCircle2 className="w-3.5 h-3.5" /> Module Completed</>
+            ) : isPlaying ? (
+              <><Play className="w-3.5 h-3.5 fill-current" /> Playing Training Video</>
+            ) : (
+              <><Pause className="w-3.5 h-3.5 fill-current" /> Ready to Watch</>
+            )}
           </div>
         </div>
 
@@ -320,12 +329,12 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
             {completed ? (
               <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#4ade80", fontSize: "0.85rem", fontWeight: 700 }}>
-                <span>✅</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 <span>Safety video requirements satisfied. You are clear to proceed to the next module.</span>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#94a3b8", fontSize: "0.8rem" }}>
-                <span>ℹ️</span>
+                <Info className="w-4 h-4 text-blue-400" />
                 <span>Watch the official NHVR Australian Heavy Vehicle training video above.</span>
               </div>
             )}

@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
+import { Download, Search, CheckCircle2, AlertCircle, QrCode, KeyRound, X } from "lucide-react";
 import { AdminDriverRow, DriverFormInput } from "../../types";
 import { DriverFormModal } from "./DriverFormModal";
+import { CertificateScannerModal } from "./CertificateScannerModal";
 
 interface DriverTableProps {
   drivers: AdminDriverRow[];
@@ -29,6 +31,7 @@ export function DriverTable({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedDriver, setSelectedDriver] = useState<AdminDriverRow | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [resetPassDriverId, setResetPassDriverId] = useState<string | null>(null);
   const [newPasswordText, setNewPasswordText] = useState("");
   const [verifyCodeText, setVerifyCodeText] = useState("");
@@ -115,6 +118,25 @@ export function DriverTable({
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             type="button"
+            onClick={() => setIsScannerOpen(true)}
+            style={{
+              padding: "9px 16px",
+              borderRadius: "8px",
+              border: "1px solid rgba(99, 102, 241, 0.4)",
+              background: "rgba(99, 102, 241, 0.15)",
+              color: "#818cf8",
+              fontWeight: 700,
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px"
+            }}
+          >
+            <QrCode className="w-4 h-4" /> Scan Certificate QR
+          </button>
+          <button
+            type="button"
             onClick={handleOpenAddModal}
             style={{
               padding: "9px 18px",
@@ -133,27 +155,35 @@ export function DriverTable({
             type="button"
             onClick={handleExportCSV}
             style={{
-              padding: "9px 16px",
-              borderRadius: "8px",
-              border: "1px solid var(--border)",
-              background: "transparent",
+              background: "var(--bg-elevated, rgba(255,255,255,0.06))",
+              border: "1px solid var(--border, #334155)",
+              color: "var(--text-secondary, #cbd5e1)",
+              padding: "10px 16px",
+              borderRadius: "10px",
               fontWeight: 600,
               fontSize: "0.85rem",
-              cursor: "pointer"
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px"
             }}
           >
-            📊 Export CSV Report
+            <Download className="w-4 h-4" /> Export CSV Report
           </button>
         </div>
       </div>
 
       {/* Search & Filter Bar */}
       <div style={{ display: "flex", gap: "12px", marginBottom: "20px", flexWrap: "wrap" }}>
+        <label htmlFor="driver-table-search" className="sr-only">Search drivers</label>
         <input
+          id="driver-table-search"
+          name="driverSearch"
           type="text"
           placeholder="Search by driver name, email, or depot..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          autoComplete="off"
           style={{ flex: 1, minWidth: "240px", padding: "8px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.88rem" }}
         />
 
@@ -207,8 +237,8 @@ export function DriverTable({
                     <div style={{ fontSize: "0.78rem", color: "var(--color-muted)" }}>{d.email}</div>
                   </td>
                   <td style={{ padding: "12px 10px" }}>
-                    <div>{d.depotLocation || "Melbourne Hub"}</div>
-                    <small style={{ color: "var(--color-muted)" }}>Class {d.licenceClass || "HC"} ({d.issuingState || "VIC"})</small>
+                    <div>{d.depotLocation || "—"}</div>
+                    <small style={{ color: "var(--color-muted)" }}>{d.licenceClass ? `Class ${d.licenceClass}` : "No licence"} {d.issuingState ? `(${d.issuingState})` : ""}</small>
                   </td>
                   <td style={{ padding: "12px 10px" }}>
                     <span
@@ -262,6 +292,17 @@ export function DriverTable({
                       </button>
                       <button
                         type="button"
+                        onClick={() => {
+                          setResetPassDriverId(d.id);
+                          setNewPasswordText("");
+                        }}
+                        style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "transparent", cursor: "pointer", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "3px" }}
+                        title="Reset Driver Password"
+                      >
+                        <KeyRound className="w-3 h-3 text-indigo-500" /> Pass
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => onResetInduction(d.id)}
                         style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid #cbd5e1", background: "transparent", cursor: "pointer", fontSize: "0.78rem" }}
                       >
@@ -285,15 +326,19 @@ export function DriverTable({
 
       {/* Certificate Verification Box */}
       <div style={{ marginTop: "28px", paddingTop: "20px", borderTop: "1px solid var(--border)" }}>
-        <h4 style={{ fontSize: "1rem", fontWeight: 700, margin: "0 0 8px" }}>
-          🔍 Public Certificate Verification
+        <h4 style={{ fontSize: "1rem", fontWeight: 700, margin: "0 0 8px", display: "flex", alignItems: "center", gap: "8px" }}>
+          <Search style={{ width: 18, height: 18, color: "#3b82f6" }} /> Public Certificate Verification
         </h4>
         <div style={{ display: "flex", gap: "10px", maxWidth: "420px" }}>
+          <label htmlFor="public-verify-code-input" className="sr-only">Certificate Verification Code</label>
           <input
+            id="public-verify-code-input"
+            name="verificationCode"
             type="text"
             placeholder="Enter Certificate Verification Code..."
             value={verifyCodeText}
             onChange={(e) => setVerifyCodeText(e.target.value)}
+            autoComplete="off"
             style={{ flex: 1, padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.85rem" }}
           />
           <button
@@ -317,7 +362,11 @@ export function DriverTable({
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-              <span style={{ fontSize: "1.2rem" }}>{(verifyResult.verified || verifyResult.valid) ? "✅" : "❌"}</span>
+              {(verifyResult.verified || verifyResult.valid) ? (
+                <CheckCircle2 style={{ width: 20, height: 20, color: "#16a34a" }} />
+              ) : (
+                <AlertCircle style={{ width: 20, height: 20, color: "#dc2626" }} />
+              )}
               <strong style={{ fontSize: "0.98rem", color: (verifyResult.verified || verifyResult.valid) ? "#16a34a" : "#dc2626" }}>
                 {(verifyResult.verified || verifyResult.valid) ? "Official BNT Logistics Certificate Verified" : "Certificate Verification Failed"}
               </strong>
@@ -327,7 +376,7 @@ export function DriverTable({
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "8px", fontSize: "0.83rem" }}>
                 <div>
                   <span className="muted" style={{ display: "block", fontSize: "0.72rem" }}>Certified Driver:</span>
-                  <strong>{verifyResult.driverName || verifyResult.driver?.fullName || "Alexander Vance"}</strong>
+                  <strong>{verifyResult.driverName || verifyResult.driver?.fullName || "—"}</strong>
                 </div>
                 <div>
                   <span className="muted" style={{ display: "block", fontSize: "0.72rem" }}>Certificate ID:</span>
@@ -335,11 +384,11 @@ export function DriverTable({
                 </div>
                 <div>
                   <span className="muted" style={{ display: "block", fontSize: "0.72rem" }}>Licence Class:</span>
-                  <strong>{verifyResult.licenceClass || "MC"} ({verifyResult.issuingState || "VIC"})</strong>
+                  <strong>{verifyResult.licenceClass || "—"} {verifyResult.issuingState ? `(${verifyResult.issuingState})` : ""}</strong>
                 </div>
                 <div>
                   <span className="muted" style={{ display: "block", fontSize: "0.72rem" }}>Depot Location:</span>
-                  <strong>{verifyResult.depotLocation || "Melbourne Hub"}</strong>
+                  <strong>{verifyResult.depotLocation || "—"}</strong>
                 </div>
               </div>
             )}
@@ -355,6 +404,101 @@ export function DriverTable({
           loading={loading}
         />
       )}
+
+      {resetPassDriverId && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "16px"
+          }}
+        >
+          <div
+            className="glass"
+            style={{
+              width: "100%",
+              maxWidth: "420px",
+              padding: "24px",
+              borderRadius: "18px",
+              background: "var(--bg-elevated, #1e293b)",
+              border: "1px solid var(--border, #334155)"
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h4 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                <KeyRound className="w-4 h-4 text-indigo-400" /> Reset Driver Password
+              </h4>
+              <button
+                type="button"
+                onClick={() => setResetPassDriverId(null)}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#94a3b8" }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="muted" style={{ fontSize: "0.83rem", margin: "0 0 14px" }}>
+              Enter a new secure temporary password for this driver account (minimum 8 characters).
+            </p>
+            <input
+              type="password"
+              placeholder="Enter at least 8 characters..."
+              value={newPasswordText}
+              onChange={(e) => setNewPasswordText(e.target.value)}
+              autoComplete="new-password"
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "8px",
+                border: "1px solid #cbd5e1",
+                marginBottom: "16px",
+                fontSize: "0.9rem"
+              }}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => setResetPassDriverId(null)}
+                style={{ padding: "8px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "transparent", cursor: "pointer", fontSize: "0.85rem" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExecuteResetPassword(resetPassDriverId)}
+                disabled={newPasswordText.length < 8}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: newPasswordText.length >= 8 ? "#1e3a5f" : "#94a3b8",
+                  color: "#fff",
+                  fontWeight: 700,
+                  cursor: newPasswordText.length >= 8 ? "pointer" : "not-allowed",
+                  fontSize: "0.85rem"
+                }}
+              >
+                Update Password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <CertificateScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        drivers={drivers}
+        onVerifyCode={onVerifyCertificate}
+      />
     </div>
   );
 }

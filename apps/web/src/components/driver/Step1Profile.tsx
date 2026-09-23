@@ -60,11 +60,14 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
       <form onSubmit={handleSubmit} noValidate>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
           <div>
-            <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+            <label htmlFor="driver-fullName" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               Full Legal Name *
             </label>
             <input
+              id="driver-fullName"
+              name="fullName"
               type="text"
+              autoComplete="name"
               value={formData.fullName}
               onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
               className={`form-input ${errors.fullName ? "form-input--error" : ""}`}
@@ -73,11 +76,14 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
             {errors.fullName && <span style={{ color: "#ef4444", fontSize: "0.75rem" }}>{errors.fullName}</span>}
           </div>
           <div>
-            <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+            <label htmlFor="driver-email" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               Email Address *
             </label>
             <input
+              id="driver-email"
+              name="email"
               type="email"
+              autoComplete="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className={`form-input ${errors.email ? "form-input--error" : ""}`}
@@ -89,11 +95,14 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
           <div>
-            <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+            <label htmlFor="driver-phone" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               Mobile Phone *
             </label>
             <input
+              id="driver-phone"
+              name="phone"
               type="tel"
+              autoComplete="tel"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               className={`form-input ${errors.phone ? "form-input--error" : ""}`}
@@ -102,10 +111,12 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
             {errors.phone && <span style={{ color: "#ef4444", fontSize: "0.75rem" }}>{errors.phone}</span>}
           </div>
           <div>
-            <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+            <label htmlFor="driver-depot" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               Depot Hub
             </label>
             <select
+              id="driver-depot"
+              name="depotLocation"
               className="form-input"
               value={formData.depotLocation}
               onChange={(e) => setFormData({ ...formData, depotLocation: e.target.value })}
@@ -122,10 +133,12 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
           <div>
-            <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+            <label htmlFor="driver-licenceClass" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               Licence Class
             </label>
             <select
+              id="driver-licenceClass"
+              name="licenceClass"
               className="form-input"
               value={formData.licenceClass}
               onChange={(e) => setFormData({ ...formData, licenceClass: e.target.value })}
@@ -138,10 +151,12 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
             </select>
           </div>
           <div>
-            <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+            <label htmlFor="driver-issuingState" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               State of Issue
             </label>
             <select
+              id="driver-issuingState"
+              name="issuingState"
               className="form-input"
               value={formData.issuingState}
               onChange={(e) => setFormData({ ...formData, issuingState: e.target.value })}
@@ -158,10 +173,12 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
             </select>
           </div>
           <div>
-            <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+            <label htmlFor="driver-licenceNumber" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               Licence Number
             </label>
             <input
+              id="driver-licenceNumber"
+              name="licenceNumber"
               type="text"
               placeholder="e.g. 09876543"
               value={formData.licenceNumber}
@@ -173,11 +190,14 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
         </div>
 
         <div style={{ marginBottom: "20px" }}>
-          <label className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
+          <label htmlFor="driver-address" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
             Residential Address *
           </label>
           <input
+            id="driver-address"
+            name="address"
             type="text"
+            autoComplete="street-address"
             value={formData.address}
             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
             className={`form-input ${errors.address ? "form-input--error" : ""}`}

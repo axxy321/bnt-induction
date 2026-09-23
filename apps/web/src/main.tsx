@@ -1,5 +1,6 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
+import { Component, ErrorInfo, ReactNode } from "react";
 import ReactDOM from "react-dom/client";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import App from "./App";
 import { AppProvider } from "./state/AppProvider";
 import "./styles.css";
@@ -33,7 +34,7 @@ class ErrorBoundary extends Component<Props, State> {
       return (
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0f172a", color: "#f8fafc", padding: "24px", fontFamily: "system-ui, sans-serif" }}>
           <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: "16px", padding: "32px", maxWidth: "560px", width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>⚠️</div>
+            <AlertTriangle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
             <h2 style={{ fontSize: "1.4rem", fontWeight: 700, margin: "0 0 12px", color: "#f43f5e" }}>
               Application Initialization Warning
             </h2>
@@ -49,9 +50,9 @@ class ErrorBoundary extends Component<Props, State> {
             </div>
             <button
               onClick={() => window.location.reload()}
-              style={{ background: "#1e3a5f", color: "#ffffff", border: "none", padding: "10px 20px", borderRadius: "8px", fontWeight: 600, cursor: "pointer" }}
+              style={{ background: "#1e3a5f", color: "#ffffff", border: "none", padding: "10px 20px", borderRadius: "8px", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px" }}
             >
-              🔄 Reload Application
+              <RefreshCw className="w-4 h-4" /> Reload Application
             </button>
           </div>
         </div>
@@ -62,12 +63,10 @@ class ErrorBoundary extends Component<Props, State> {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <AppProvider>
-        <App />
-      </AppProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
+  <ErrorBoundary>
+    <AppProvider>
+      <App />
+    </AppProvider>
+  </ErrorBoundary>
 );
 

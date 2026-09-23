@@ -1,5 +1,6 @@
-import { useState, ChangeEvent } from "react";
+import React, { useState, ChangeEvent } from "react";
 import { DocumentType, UploadedDocument } from "../../types";
+import { FileText, Stethoscope, ShieldCheck, AlertTriangle, Clock, Truck, CheckCircle2, Upload, XCircle, Check } from "lucide-react";
 
 interface Step2DocumentsProps {
   documents: UploadedDocument[];
@@ -13,7 +14,7 @@ interface DocumentRequirement {
   title: string;
   description: string;
   required: boolean;
-  icon: string;
+  IconComponent: React.ComponentType<{ className?: string }>;
 }
 
 const documentRequirements: DocumentRequirement[] = [
@@ -22,42 +23,42 @@ const documentRequirements: DocumentRequirement[] = [
     title: "Heavy Vehicle Driver Licence",
     description: "Front & back scan of your current HC, MC, HR, or MR driver licence.",
     required: true,
-    icon: "🪪"
+    IconComponent: FileText
   },
   {
     type: "medical_certificate",
     title: "Commercial Driver Medical Certificate",
     description: "Current Fitness to Drive medical assessment under Austroads guidelines.",
     required: true,
-    icon: "🏥"
+    IconComponent: Stethoscope
   },
   {
     type: "right_to_work",
     title: "Right to Work / VEVO Check",
     description: "Australian Passport, Birth Certificate, or VEVO Work Visa confirmation.",
     required: true,
-    icon: "🆔"
+    IconComponent: ShieldCheck
   },
   {
     type: "dangerous_goods_license",
     title: "Dangerous Goods (DG) Licence",
     description: "Mandatory if transporting hazardous substances or dangerous bulk cargo.",
     required: false,
-    icon: "⚠️"
+    IconComponent: AlertTriangle
   },
   {
     type: "nhvas_bfm_certificate",
     title: "Fatigue Arrangement Evidence",
     description: "Provide current operator evidence only where your assigned task requires an accredited fatigue arrangement.",
     required: false,
-    icon: "⏱️"
+    IconComponent: Clock
   },
   {
     type: "hrwl_forklift",
     title: "High Risk Work Licence (Forklift LF)",
     description: "HRWL Forklift Endorsement if operating yard equipment or self-loading.",
     required: false,
-    icon: "🚜"
+    IconComponent: Truck
   }
 ];
 
@@ -135,7 +136,7 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
         <div
           style={{
             padding: "12px 16px",
-            borderRadius: "12px",
+            borderRadius: "10px",
             background: "rgba(217, 119, 6, 0.08)",
             border: "1px solid rgba(217, 119, 6, 0.25)",
             color: "#d97706",
@@ -146,7 +147,7 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
             gap: "10px"
           }}
         >
-          <span>⏳</span>
+          <Clock className="w-5 h-5 flex-shrink-0 text-amber-500" />
           <div>
             <strong>{pendingVerificationCount} Document(s) Awaiting Compliance Manager Review</strong>
             <p style={{ margin: "2px 0 0", fontSize: "0.8rem", opacity: 0.9 }}>
@@ -160,6 +161,7 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
         {documentRequirements.map((req) => {
           const doc = getDocStatus(req.type);
           const isUploading = uploadingType === req.type;
+          const { IconComponent } = req;
 
           return (
             <div
@@ -168,32 +170,47 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                gap: "16px",
                 padding: "16px 20px",
                 borderRadius: "12px",
-                background: "var(--bg-elevated, rgba(255,255,255,0.04))",
-                border: "1px solid var(--border, #e2e8f0)",
-                flexWrap: "wrap"
+                border: "1px solid var(--border, #cbd5e1)",
+                background: "var(--bg-elevated, #ffffff)",
+                flexWrap: "wrap",
+                gap: "12px"
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1, minWidth: "260px" }}>
-                <span style={{ fontSize: "1.6rem" }}>{req.icon}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <div
+                  style={{
+                    width: "44px",
+                    height: "44px",
+                    borderRadius: "10px",
+                    background: doc?.status === "approved" ? "rgba(34, 197, 94, 0.12)" : "rgba(37, 99, 235, 0.08)",
+                    color: doc?.status === "approved" ? "#16a34a" : "#2563eb",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0
+                  }}
+                >
+                  <IconComponent className="w-5 h-5" />
+                </div>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <strong style={{ fontSize: "0.95rem" }}>{req.title}</strong>
-                    {req.required ? (
-                      <span style={{ background: "rgba(239, 68, 68, 0.1)", color: "#ef4444", fontSize: "0.7rem", fontWeight: 700, padding: "2px 6px", borderRadius: "4px" }}>
-                        MANDATORY
-                      </span>
-                    ) : (
-                      <span style={{ background: "rgba(100, 116, 139, 0.1)", color: "#64748b", fontSize: "0.7rem", fontWeight: 600, padding: "2px 6px", borderRadius: "4px" }}>
-                        OPTIONAL
+                    {req.required && (
+                      <span style={{ fontSize: "0.72rem", padding: "2px 6px", borderRadius: "4px", background: "#fee2e2", color: "#dc2626", fontWeight: 700 }}>
+                        Required
                       </span>
                     )}
                   </div>
-                  <p className="muted" style={{ margin: "2px 0 0", fontSize: "0.8rem" }}>
+                  <p className="muted" style={{ fontSize: "0.82rem", margin: "2px 0 0" }}>
                     {req.description}
                   </p>
+                  {doc?.expiresAt && (
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                      Expires: {new Date(doc.expiresAt).toLocaleDateString("en-AU")}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -201,18 +218,18 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
                 {doc ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     {doc.status === "approved" && (
-                      <span style={{ background: "rgba(34, 197, 94, 0.15)", color: "#22c55e", fontWeight: 700, fontSize: "0.8rem", padding: "4px 10px", borderRadius: "20px" }}>
-                        ✓ APPROVED
+                      <span style={{ background: "rgba(34, 197, 94, 0.15)", color: "#22c55e", fontWeight: 700, fontSize: "0.8rem", padding: "4px 10px", borderRadius: "20px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        <Check className="w-3.5 h-3.5" /> APPROVED
                       </span>
                     )}
                     {doc.status === "pending" && (
-                      <span style={{ background: "rgba(217, 119, 6, 0.15)", color: "#d97706", fontWeight: 700, fontSize: "0.8rem", padding: "4px 10px", borderRadius: "20px" }}>
-                        ⏳ PENDING REVIEW
+                      <span style={{ background: "rgba(217, 119, 6, 0.15)", color: "#d97706", fontWeight: 700, fontSize: "0.8rem", padding: "4px 10px", borderRadius: "20px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        <Clock className="w-3.5 h-3.5" /> PENDING REVIEW
                       </span>
                     )}
                     {doc.status === "rejected" && (
-                      <span style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", fontWeight: 700, fontSize: "0.8rem", padding: "4px 10px", borderRadius: "20px" }}>
-                        ✕ REJECTED: {doc.rejectionReason || "Re-upload required"}
+                      <span style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", fontWeight: 700, fontSize: "0.8rem", padding: "4px 10px", borderRadius: "20px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        <XCircle className="w-3.5 h-3.5" /> REJECTED: {doc.rejectionReason || "Re-upload required"}
                       </span>
                     )}
                   </div>

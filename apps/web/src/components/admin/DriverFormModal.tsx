@@ -1,4 +1,5 @@
-import { useState, FormEvent } from "react";
+import React, { useState, FormEvent } from "react";
+import { AlertTriangle, X } from "lucide-react";
 import { AdminDriverRow, DriverFormInput } from "../../types";
 
 interface DriverFormModalProps {
@@ -25,6 +26,8 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -37,7 +40,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
     if (!formData.phone.trim() || formData.phone.trim().length < 5) {
       errs.phone = "Valid mobile number is required.";
     }
-    if (!formData.address.trim() || formData.address.trim().length < 5) {
+    if (!formData.address.trim() || formData.address.trim().length < 3) {
       errs.address = "Home address is required.";
     }
     if (!isEditing && (!formData.password || formData.password.length < 8)) {
@@ -49,8 +52,17 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
     if (!validate()) return;
-    await onSave(formData);
+
+    setIsSubmitting(true);
+    try {
+      await onSave(formData);
+    } catch (err: any) {
+      setSubmitError(err?.message || "Failed to save driver account. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -88,13 +100,34 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
           <button
             type="button"
             onClick={onClose}
-            style={{ background: "transparent", border: "none", fontSize: "1.2rem", cursor: "pointer" }}
+            style={{ background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}
           >
-            ✕
+            <X className="w-5 h-5 text-slate-500 hover:text-slate-800" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
+          {submitError && (
+            <div
+              style={{
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                color: "#ef4444",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                marginBottom: "16px",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>{submitError}</span>
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
@@ -254,10 +287,25 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
             </button>
             <button
               type="submit"
-              disabled={loading}
-              style={{ padding: "8px 20px", borderRadius: "8px", border: "none", background: "#1e3a5f", color: "#fff", fontWeight: 700, cursor: loading ? "not-allowed" : "pointer" }}
+              disabled={isSubmitting || loading}
+              style={{
+                padding: "8px 20px",
+                borderRadius: "8px",
+                border: "none",
+                background: "#1e3a5f",
+                color: "#fff",
+                fontWeight: 700,
+                cursor: isSubmitting || loading ? "not-allowed" : "pointer",
+                opacity: isSubmitting || loading ? 0.7 : 1
+              }}
             >
-              {loading ? "Saving..." : isEditing ? "Update Driver Profile" : "Create Driver Account"}
+              {isSubmitting || loading
+                ? isEditing
+                  ? "Updating Driver Profile..."
+                  : "Creating Driver Account..."
+                : isEditing
+                ? "Update Driver Profile"
+                : "Create Driver Account"}
             </button>
           </div>
         </form>

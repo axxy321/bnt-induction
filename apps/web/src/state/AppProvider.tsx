@@ -114,17 +114,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (nextSession.user.role === "driver") {
-        const [bundle, questions, version] = await Promise.all([
-          api.getDriverProfile(nextSession).catch((err) => {
-            console.warn("Driver profile load fallback:", err);
-            return null as any;
-          }),
-          api.getQuizQuestions(nextSession).catch(() => ({ questions: [] })),
-          getInductionVersion(nextSession).catch(() => null)
-        ]);
+        const bundle = await api.getDriverProfile(nextSession);
         setDriverBundle(bundle);
-        setQuizQuestions(questions.questions);
-        setInductionVersion(version);
+
+        void api.getQuizQuestions(nextSession).then((questions) => {
+          if (questions?.questions) setQuizQuestions(questions.questions);
+        }).catch((err) => {
+          console.warn("Quiz questions load notice:", err);
+        });
+
+        void getInductionVersion(nextSession).then((v) => {
+          if (v) setInductionVersion(v);
+        }).catch(() => {});
+
         setAdminOverview(null);
       } else {
         const overview = await api.getAdminOverview(nextSession).catch((err) => {
