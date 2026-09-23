@@ -9,31 +9,7 @@ export default defineConfig(() => {
 
 
       VitePWA({
-        registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
-        manifest: {
-          name: 'BNT Driver Induction',
-          short_name: 'BNT Induction',
-          description: 'Driver Induction and Compliance Portal',
-          theme_color: '#ffffff',
-          icons: [
-            {
-              src: 'pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png'
-            },
-            {
-              src: 'pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png'
-            }
-          ]
-        },
-        workbox: {
-          cleanupOutdatedCaches: true,
-          skipWaiting: true,
-          clientsClaim: true
-        }
+        selfDestroying: true
       })
     ],
     build: {
