@@ -1259,16 +1259,38 @@ export const api = {
     }
 
     try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCode);
+      const orFilter = isUuid
+        ? `completion_id.eq.${cleanCode},verification_code.eq.${cleanCode},id.eq.${cleanCode}`
+        : `completion_id.eq.${cleanCode},verification_code.eq.${cleanCode}`;
+
       // Search certificates table in Supabase
       const { data: cert } = await supabase
         .from("certificates")
-        .select("*, profiles(*)")
-        .or(`completion_id.eq.${cleanCode},verification_code.eq.${cleanCode},id.eq.${cleanCode}`)
+        .select("*")
+        .or(orFilter)
         .maybeSingle();
 
       if (cert) {
-        const driverProfile = (cert as any).profiles;
-        const fullName = driverProfile?.full_name || "Certified Heavy Vehicle Driver";
+        let fullName = "Certified Heavy Vehicle Driver";
+        let licenceClass = "HC";
+        let issuingState = "VIC";
+        let depotLocation = "Melbourne Hub";
+
+        if (cert.user_id) {
+          const { data: driverProfile } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", cert.user_id)
+            .maybeSingle();
+          if (driverProfile) {
+            fullName = driverProfile.full_name || fullName;
+            licenceClass = (driverProfile as any).licence_class || licenceClass;
+            issuingState = (driverProfile as any).issuing_state || issuingState;
+            depotLocation = (driverProfile as any).depot_location || depotLocation;
+          }
+        }
+
         return {
           valid: true,
           verified: true,
@@ -1278,32 +1300,42 @@ export const api = {
           verificationCode: cert.verification_code || cleanCode,
           issuedAt: cert.issued_at || cert.created_at || new Date().toISOString(),
           expiresAt: cert.expires_at || new Date(Date.now() + 365 * 864e5).toISOString(),
-          licenceClass: driverProfile?.licence_class || "HC",
-          issuingState: driverProfile?.issuing_state || "VIC",
-          depotLocation: driverProfile?.depot_location || "Melbourne Hub"
+          licenceClass,
+          issuingState,
+          depotLocation
         };
       }
 
-      // Check profiles table if matching code
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("*")
-        .or(`id.eq.${cleanCode},email.eq.${cleanCode}`)
-        .maybeSingle();
+      // Check profiles table if matching code or email or ID prefix
+      let profQuery = supabase.from("profiles").select("*");
+      if (isUuid) {
+        profQuery = profQuery.or(`id.eq.${cleanCode},email.eq.${cleanCode}`);
+      } else if (cleanCode.includes("@")) {
+        profQuery = profQuery.eq("email", cleanCode);
+      } else {
+        const prefix = cleanCode.replace(/^(VERIFY-|COMP-)/i, "").toLowerCase();
+        if (prefix.length >= 4) {
+          profQuery = profQuery.ilike("id", `${prefix}%`);
+        } else {
+          profQuery = profQuery.eq("email", cleanCode);
+        }
+      }
+
+      const { data: prof } = await profQuery.maybeSingle();
 
       if (prof) {
         return {
           valid: true,
           verified: true,
-          driverName: prof.full_name,
-          driver: { fullName: prof.full_name },
+          driverName: prof.full_name || "Heavy Vehicle Driver",
+          driver: { fullName: prof.full_name || "Heavy Vehicle Driver" },
           certificateId: `COMP-${prof.id.slice(0, 8).toUpperCase()}`,
           verificationCode: `VERIFY-${prof.id.slice(0, 8)}`,
           issuedAt: new Date().toISOString(),
           expiresAt: new Date(Date.now() + 365 * 864e5).toISOString(),
-          licenceClass: prof.licence_class || "HC",
-          issuingState: prof.issuing_state || "VIC",
-          depotLocation: prof.depot_location || "Melbourne Hub"
+          licenceClass: (prof as any).licence_class || "HC",
+          issuingState: (prof as any).issuing_state || "VIC",
+          depotLocation: (prof as any).depot_location || "Melbourne Hub"
         };
       }
     } catch (err) {
