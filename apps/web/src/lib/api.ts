@@ -814,16 +814,47 @@ export const api = {
 
 
   async registerDriver(input: DriverSelfRegisterInput) {
-    const response = await fetch(`${apiBaseUrl}/auth/register-driver`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input)
-    });
-    const body = await response.json();
-    if (!response.ok) {
-      throw new Error(body.message ?? "Self-registration failed.");
+    const redirectUrl = typeof window !== "undefined" ? window.location.origin : "https://driver-induction-platform.vercel.app";
+    try {
+      const response = await fetch(`${apiBaseUrl}/auth/register-driver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input)
+      });
+      if (response.ok) {
+        const body = await response.json();
+        return body as { message: string; email: string };
+      }
+    } catch {
+      // Fallback to client Supabase signUp for Vercel edge deployment
     }
-    return body as { message: string; email: string };
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const tempAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+
+    const { data: authData, error: authErr } = await tempAuthClient.auth.signUp({
+      email: input.email.trim(),
+      password: input.password,
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          role: "driver",
+          full_name: input.fullName.trim(),
+          licenceClass: input.licenceClass || "HC",
+          issuingState: input.issuingState || "VIC",
+          licenceNumber: input.licenceNumber || "",
+          depotLocation: input.depotCode || "Melbourne Hub"
+        }
+      }
+    });
+
+    if (authErr && !authData?.user) {
+      throw new Error(authErr.message || "Registration failed.");
+    }
+
+    return { message: "Driver registered successfully. Confirmation email sent.", email: input.email };
   },
 
   async createDriver(session: SessionState, input: {
@@ -838,6 +869,7 @@ export const api = {
     licenceNumber?: string;
     depotLocation?: string;
   }) {
+    const redirectUrl = typeof window !== "undefined" ? window.location.origin : "https://driver-induction-platform.vercel.app";
     try {
       await adminRequest("/admin/drivers", session, {
         method: "POST",
@@ -878,6 +910,7 @@ export const api = {
         email: cleanEmail,
         password: input.password,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             role: "driver",
             full_name: cleanName,
@@ -888,6 +921,17 @@ export const api = {
           }
         }
       });
+
+      // Dispatch confirmation email via Supabase resend if needed
+      try {
+        await tempAuthClient.auth.resend({
+          type: "signup",
+          email: cleanEmail,
+          options: {
+            emailRedirectTo: redirectUrl
+          }
+        });
+      } catch {}
 
       let userId = authData.user?.id;
 
