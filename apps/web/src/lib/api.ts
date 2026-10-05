@@ -1180,19 +1180,33 @@ export const api = {
       // Direct Supabase fallback
     }
 
-    await supabase.from("induction_progress").update({
-      current_step: 1,
-      completion_percentage: 0,
-      completed_step_ids: [],
-      completed: false,
-      quiz_score: null,
-      declaration_accepted: false,
-      signature: null,
-      declaration_agreed_at: null, // M-8 FIX: clear stale legal consent timestamp
-      completed_at: null,
-      updated_at: new Date().toISOString()
-    }).eq("user_id", driverId);
-    await supabase.from("drivers").update({ status: "Not Started" }).eq("user_id", driverId);
+    try {
+      await supabase.from("documents").delete().eq("user_id", driverId);
+      await supabase.from("quiz_attempts").delete().eq("user_id", driverId);
+      await supabase.from("certificates").delete().eq("user_id", driverId);
+      await supabase.from("driver_feedback").delete().eq("user_id", driverId);
+      await supabase.from("learning_section_completions").delete().eq("user_id", driverId);
+      await supabase.from("induction_progress").delete().eq("user_id", driverId);
+      await supabase.from("induction_progress").insert({
+        user_id: driverId,
+        current_step: 1,
+        completion_percentage: 0,
+        completed_step_ids: [],
+        completed: false,
+        quiz_score: null,
+        declaration_accepted: false,
+        signature: null,
+        declaration_agreed_at: null,
+        completed_at: null,
+        updated_at: new Date().toISOString()
+      });
+      await supabase.from("drivers").update({ status: "Not Started" }).eq("user_id", driverId);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(`bnt-progress-${driverId}`);
+      }
+    } catch (err) {
+      console.warn("resetDriverInduction direct fallback warning:", err);
+    }
   },
 
   async deleteDriver(session: SessionState, driverId: string) {
