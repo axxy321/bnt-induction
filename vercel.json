@@ -5,6 +5,7 @@
   "framework": "vite",
 
   "rewrites": [
+    { "source": "/api/:match*", "destination": "/api/[[...path]]" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [

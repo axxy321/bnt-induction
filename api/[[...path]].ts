@@ -1631,7 +1631,13 @@ export default async function handler(request: Request): Promise<Response> {
   if (configError) return configError;
 
   const url = new URL(request.url, APP_URL);
-  const rawPath = url.pathname.replace(/^\/+/, ""); // e.g. "api/induction/step"
+  let rawPath = (url.pathname || "").replace(/^\/+/, ""); // e.g. "api/induction/step"
+  if (rawPath.includes("[[...path]]") || rawPath === "api") {
+    const matched = request.headers.get("x-matched-path") || request.headers.get("x-invoke-path");
+    if (matched) {
+      rawPath = matched.replace(/^\/+/, "");
+    }
+  }
   const cleanPath = rawPath.replace(/^api\//, "").replace(/\/+$/, "");
   const method = request.method;
 
