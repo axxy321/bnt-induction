@@ -1,21 +1,28 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { ShieldCheck, Truck, Eye, EyeOff, AlertTriangle, ArrowRight, Loader2, Mail, Lock } from "lucide-react";
 import bntTruckBg from "../../assets/bnt-truck-bg.jpg";
+import { BrandingSettings } from "../../types";
 
 type UserRole = "driver" | "admin";
 
 interface LoginFormProps {
+  branding?: BrandingSettings | null;
   onLogin: (email: string, pass: string, role: UserRole) => Promise<void>;
+  onRequestPasswordHelp: (email: string) => Promise<void>;
   loading: boolean;
   error: string | null;
 }
 
-export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
+export function LoginForm({ branding, onLogin, onRequestPasswordHelp, loading, error }: LoginFormProps) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("driver");
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordHelpLoading, setPasswordHelpLoading] = useState(false);
+  const [passwordHelpMessage, setPasswordHelpMessage] = useState("");
   const [formErrors, setFormErrors] = useState<{ email?: string; password?: string }>({});
 
   const validate = () => {
@@ -23,10 +30,10 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!email.trim() || !emailRegex.test(email.trim())) {
-      errs.email = "Please enter a valid email address.";
+      errs.email = t("error_email");
     }
     if (!password) {
-      errs.password = "Password is required.";
+      errs.password = t("error_password");
     }
     setFormErrors(errs);
     return Object.keys(errs).length === 0;
@@ -36,6 +43,24 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
     e.preventDefault();
     if (!validate()) return;
     await onLogin(email.trim(), password, role);
+  };
+
+  const handlePasswordHelp = async () => {
+    const cleanEmail = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setFormErrors({ ...formErrors, email: t("error_email") });
+      return;
+    }
+    setPasswordHelpLoading(true);
+    setPasswordHelpMessage("");
+    try {
+      await onRequestPasswordHelp(cleanEmail);
+      setPasswordHelpMessage(t("password_help_success"));
+    } catch {
+      setPasswordHelpMessage(t("password_help_error"));
+    } finally {
+      setPasswordHelpLoading(false);
+    }
   };
 
   return (
@@ -66,13 +91,22 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
         {/* Header Branding */}
         <div className="text-center relative z-10 space-y-2.5">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-black tracking-widest uppercase mb-1 shadow-sm">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> BNT LOGISTICS PORTAL
+            {branding?.logoUrl ? (
+              <img
+                src={branding.logoUrl}
+                alt={branding.companyName || "Company"}
+                className="h-4 w-auto object-contain"
+              />
+            ) : (
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span>{branding?.companyName || "BNT LOGISTICS"} PORTAL</span>
           </div>
           <h2 className="text-3xl font-extrabold text-white tracking-tight font-heading leading-tight">
-            Site Compliance & Induction
+            {t("login_title")}
           </h2>
           <p className="text-slate-300 text-xs font-medium leading-relaxed max-w-xs mx-auto">
-            Heavy Vehicle Driver & Safety Gate Portal
+            {branding?.welcomeText || t("login_subtitle")}
           </p>
         </div>
 
@@ -87,7 +121,7 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            <Truck className="w-4 h-4" /> Driver Access
+            <Truck className="w-4 h-4" /> {t("driver_access")}
           </button>
           <button
             type="button"
@@ -98,7 +132,7 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
                 : "text-slate-400 hover:text-white"
             }`}
           >
-            <ShieldCheck className="w-4 h-4" /> Admin Access
+            <ShieldCheck className="w-4 h-4" /> {t("admin_access")}
           </button>
         </div>
 
@@ -113,7 +147,7 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
 
           <div>
             <label htmlFor="login-email" className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-slate-400" /> Email Address
+              <Mail className="w-3.5 h-3.5 text-slate-400" /> {t("email_address")}
             </label>
             <input
               id="login-email"
@@ -138,7 +172,7 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label htmlFor="login-password" className="block text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-slate-400" /> Password
+                <Lock className="w-3.5 h-3.5 text-slate-400" /> {t("password")}
               </label>
               <button
                 type="button"
@@ -146,7 +180,7 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
                 className="text-[11px] text-emerald-400 font-semibold hover:underline flex items-center gap-1"
               >
                 {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>{showPassword ? "Hide" : "Show"}</span>
+                <span>{showPassword ? t("hide") : t("show")}</span>
               </button>
             </div>
             <input
@@ -167,6 +201,19 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
               }`}
             />
             {formErrors.password && <span className="text-rose-400 text-[11px] font-semibold mt-1 block">{formErrors.password}</span>}
+            {role === "driver" && (
+              <div className="mt-2 flex flex-col items-start gap-1">
+                <button
+                  type="button"
+                  onClick={() => void handlePasswordHelp()}
+                  disabled={passwordHelpLoading}
+                  className="text-[11px] text-emerald-400 font-semibold hover:underline disabled:opacity-60"
+                >
+                  {passwordHelpLoading ? t("password_help_sending") : t("forgot_password")}
+                </button>
+                {passwordHelpMessage && <span className="text-[11px] text-slate-300">{passwordHelpMessage}</span>}
+              </div>
+            )}
           </div>
 
           <button
@@ -177,20 +224,21 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
                 ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 shadow-emerald-950/40"
                 : "bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-400 shadow-blue-950/40"
             }`}
+            style={branding?.primaryColor ? { background: branding.primaryColor } : undefined}
           >
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-white" />
-                <span>Authenticating Credentials...</span>
+                <span>{t("authenticating")}</span>
               </>
             ) : role === "driver" ? (
               <>
-                <span>Enter Driver Portal</span>
+                <span>{t("enter_driver_portal")}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </>
             ) : (
               <>
-                <span>Enter Admin Console</span>
+                <span>{t("enter_admin_console")}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </>
             )}
@@ -198,7 +246,7 @@ export function LoginForm({ onLogin, loading, error }: LoginFormProps) {
         </form>
 
         <div className="text-center pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
-          <span>Protected by BNT Logistics NHVAS & WHS Security Suite</span>
+          <span>{t("protected_by")}</span>
         </div>
       </motion.div>
     </div>

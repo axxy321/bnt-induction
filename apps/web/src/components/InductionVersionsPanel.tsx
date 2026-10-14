@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getAdminInductionVersions, publishInductionVersion } from "../lib/api";
 import { InductionVersionRecord, SessionState } from "../types";
 
@@ -26,6 +27,7 @@ interface InductionVersionsPanelProps {
 }
 
 export function InductionVersionsPanel({ session }: InductionVersionsPanelProps) {
+  const { t } = useTranslation();
   const [versions, setVersions] = useState<InductionVersionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
@@ -47,7 +49,7 @@ export function InductionVersionsPanel({ session }: InductionVersionsPanelProps)
       const data = await getAdminInductionVersions(session);
       setVersions(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load versions.");
+      setError(err instanceof Error ? err.message : t("ivp_err_load"));
     } finally {
       setLoading(false);
     }
@@ -55,10 +57,10 @@ export function InductionVersionsPanel({ session }: InductionVersionsPanelProps)
 
   function validate(): boolean {
     const errors: { versionLabel?: string; revisionNotes?: string } = {};
-    if (!versionLabel.trim()) errors.versionLabel = "Version label is required.";
-    if (versionLabel.trim().length > 32) errors.versionLabel = "Version label must be 32 characters or fewer.";
-    if (!revisionNotes.trim()) errors.revisionNotes = "Revision notes are required.";
-    if (revisionNotes.trim().length < 10) errors.revisionNotes = "Revision notes must be at least 10 characters.";
+    if (!versionLabel.trim()) errors.versionLabel = t("ivp_label_err");
+    if (versionLabel.trim().length > 32) errors.versionLabel = t("ivp_label_len_err");
+    if (!revisionNotes.trim()) errors.revisionNotes = t("ivp_notes_err");
+    if (revisionNotes.trim().length < 10) errors.revisionNotes = t("ivp_notes_len_err");
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -80,42 +82,40 @@ export function InductionVersionsPanel({ session }: InductionVersionsPanelProps)
       setRevisionNotes("");
       setFormErrors({});
       setSuccessMessage(
-        `Version ${newVersion.versionLabel} published successfully. Drivers will be notified on their next login.`
+        t("ivp_success", { version: newVersion.versionLabel })
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to publish version.");
+      setError(err instanceof Error ? err.message : t("ivp_err_publish"));
     } finally {
       setPublishing(false);
     }
   }
 
   return (
-    <div className="induction-versions-panel" aria-label="Induction Versions Management">
-      <h3 className="induction-versions-panel__title">Induction Versions</h3>
+    <div className="induction-versions-panel" aria-label={t("ivp_aria")}>
+      <h3 className="induction-versions-panel__title">{t("ivp_title")}</h3>
       <p className="induction-versions-panel__description">
-        Publishing a new version will notify all drivers (on next login) that they must re-complete the
-        induction. Their existing certificates are archived and remain verifiable — only a re-induction
-        will issue a new certificate.
+        {t("ivp_desc")}
       </p>
 
       {/* Publish New Version Form */}
       <form
         onSubmit={(e) => void handlePublish(e)}
         className="induction-versions-panel__form"
-        aria-label="Publish new induction version"
+        aria-label={t("ivp_form_aria")}
         noValidate
       >
-        <h4 className="induction-versions-panel__form-title">Publish New Version</h4>
+        <h4 className="induction-versions-panel__form-title">{t("ivp_form_title")}</h4>
 
         <div className="form-group">
           <label htmlFor="version-label" className="form-label">
-            Version Label <span aria-hidden="true">*</span>
+            {t("ivp_label")}<span aria-hidden="true">*</span>
           </label>
           <input
             id="version-label"
             type="text"
             className={`form-input${formErrors.versionLabel ? " form-input--error" : ""}`}
-            placeholder="e.g. 2.0, 2024-Q3, July 2024"
+            placeholder={t("ivp_label_ph")}
             value={versionLabel}
             maxLength={32}
             onChange={(e) => setVersionLabel(e.target.value)}
@@ -132,12 +132,12 @@ export function InductionVersionsPanel({ session }: InductionVersionsPanelProps)
 
         <div className="form-group">
           <label htmlFor="revision-notes" className="form-label">
-            Revision Notes <span aria-hidden="true">*</span>
+            {t("ivp_notes")}<span aria-hidden="true">*</span>
           </label>
           <textarea
             id="revision-notes"
             className={`form-input form-textarea${formErrors.revisionNotes ? " form-input--error" : ""}`}
-            placeholder="Describe what changed in this version — e.g. updated WHS policy, new fatigue management rules..."
+            placeholder={t("ivp_notes_ph")}
             value={revisionNotes}
             maxLength={2000}
             rows={4}
@@ -171,28 +171,28 @@ export function InductionVersionsPanel({ session }: InductionVersionsPanelProps)
           disabled={publishing}
           aria-busy={publishing}
         >
-          {publishing ? "Publishing…" : "Publish New Version"}
+          {publishing ? t("ivp_publishing") : t("ivp_publish")}
         </button>
       </form>
 
       {/* Version History Table */}
-      <div className="induction-versions-panel__history" aria-label="Version history">
-        <h4 className="induction-versions-panel__history-title">Version History</h4>
+      <div className="induction-versions-panel__history" aria-label={t("ivp_history_aria")}>
+        <h4 className="induction-versions-panel__history-title">{t("ivp_history_title")}</h4>
 
         {loading ? (
           <p className="induction-versions-panel__loading" aria-live="polite" aria-busy="true">
-            Loading versions…
+            {t("ivp_loading")}
           </p>
         ) : versions.length === 0 ? (
-          <p className="induction-versions-panel__empty">No versions published yet.</p>
+          <p className="induction-versions-panel__empty">{t("ivp_empty")}</p>
         ) : (
-          <table className="versions-table" aria-label="Induction version history">
+          <table className="versions-table" aria-label={t("ivp_table_aria")}>
             <thead>
               <tr>
-                <th scope="col">Version</th>
-                <th scope="col">Status</th>
-                <th scope="col">Published</th>
-                <th scope="col">Revision Notes</th>
+                <th scope="col">{t("ivp_th_version")}</th>
+                <th scope="col">{t("ivp_th_status")}</th>
+                <th scope="col">{t("ivp_th_published")}</th>
+                <th scope="col">{t("ivp_th_notes")}</th>
               </tr>
             </thead>
             <tbody>
@@ -203,12 +203,12 @@ export function InductionVersionsPanel({ session }: InductionVersionsPanelProps)
                   </td>
                   <td>
                     {v.isCurrent ? (
-                      <span className="badge badge--active" aria-label="Current active version">
-                        Current
+                      <span className="badge badge--active" aria-label={t("ivp_current_aria")}>
+                        {t("ivp_current")}
                       </span>
                     ) : (
-                      <span className="badge badge--archived" aria-label="Archived version">
-                        Archived
+                      <span className="badge badge--archived" aria-label={t("ivp_archived_aria")}>
+                        {t("ivp_archived")}
                       </span>
                     )}
                   </td>

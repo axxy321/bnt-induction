@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   QrCode,
   X,
@@ -31,6 +32,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
   const [verifying, setVerifying] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   if (!isOpen) return null;
 
@@ -63,7 +65,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
           issuingState: matchedDriver.issuingState || "VIC",
           depotLocation: matchedDriver.depotLocation || "BNT Port Melbourne",
           certificateId: matchedDriver.certificateId || matchedDriver.verificationCode || `BNT-CERT-${clean.slice(0, 8)}`,
-          completedAt: matchedDriver.completedAt || "Verified Current",
+          completedAt: matchedDriver.completedAt || t("csm_verified_current"),
           status: matchedDriver.status,
           completionPercentage: matchedDriver.completionPercentage || 100
         });
@@ -76,7 +78,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
       if (res && (res.verified || res.valid)) {
         setScanResult({
           valid: true,
-          driverName: res.driverName || res.driver?.fullName || "Verified Driver",
+          driverName: res.driverName || res.driver?.fullName || t("csm_verified_driver"),
           driverEmail: res.email || "",
           licenceClass: res.licenceClass || "—",
           issuingState: res.issuingState || "—",
@@ -87,10 +89,10 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
           completionPercentage: res.completionPercentage || 100
         });
       } else {
-        setErrorMessage(res?.message || "Certificate verification returned invalid. Verification record not recognized.");
+        setErrorMessage(res?.message || t("csm_err_invalid"));
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to verify certificate code. Please check connectivity.");
+      setErrorMessage(err?.message || t("csm_err_connectivity"));
     } finally {
       setVerifying(false);
     }
@@ -116,8 +118,8 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
               <QrCode className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black text-white">Gate Pass & Certificate Scanner</h3>
-              <p className="text-xs text-slate-400">Security Gate & Depot Compliance Verification</p>
+              <h3 className="text-lg font-black text-white">{t("csm_title")}</h3>
+              <p className="text-xs text-slate-400">{t("csm_subtitle")}</p>
             </div>
           </div>
           <button
@@ -148,24 +150,24 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
               <Camera className="w-6 h-6" />
             </div>
             <p className="text-sm font-bold text-white mb-1">
-              Tap to Scan Camera Feed or Drop Driver QR Pass Image
+              {t("csm_drop_title")}
             </p>
             <p className="text-xs text-slate-400">
-              Decodes encrypted BNT Logistics driver induction barcodes & certificate hashes
+              {t("csm_drop_sub")}
             </p>
           </div>
 
           {/* Manual Code Input Bar */}
           <div>
             <label htmlFor="scanner-code-input" className="block text-xs font-bold text-slate-300 mb-2">
-              Manual Certificate / QR Code Input
+              {t("csm_manual_label")}
             </label>
             <div className="flex gap-2">
               <input
                 id="scanner-code-input"
                 name="verificationCode"
                 type="text"
-                placeholder="e.g. BNT-IND-2026 or driver certificate hash..."
+                placeholder={t("csm_code_ph")}
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value)}
                 onKeyDown={(e) => {
@@ -183,7 +185,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
                 className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg flex items-center gap-1.5 shrink-0"
               >
                 <Search className="w-4 h-4" />
-                {verifying ? "Checking..." : "Verify Pass"}
+                {verifying ? t("csm_checking") : t("csm_verify")}
               </button>
             </div>
           </div>
@@ -203,7 +205,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                   <span className="text-sm font-bold text-emerald-400">
-                    Depot Site Entry Authorized
+                    {t("csm_authorized")}
                   </span>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
@@ -214,30 +216,30 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
                   <span className="text-slate-400 block text-[11px] font-medium flex items-center gap-1 mb-1">
-                    <UserCheck className="w-3.5 h-3.5 text-indigo-400" /> Driver Name
+                    <UserCheck className="w-3.5 h-3.5 text-indigo-400" /> {t("csm_driver_name")}
                   </span>
                   <span className="text-white font-bold text-sm">{scanResult.driverName}</span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
                   <span className="text-slate-400 block text-[11px] font-medium flex items-center gap-1 mb-1">
-                    <Truck className="w-3.5 h-3.5 text-emerald-400" /> Licence Classification
+                    <Truck className="w-3.5 h-3.5 text-emerald-400" /> {t("csm_licence_class")}
                   </span>
                   <span className="text-white font-bold text-sm">
-                    Class {scanResult.licenceClass} ({scanResult.issuingState})
+                    {t("csm_class_prefix", { class: scanResult.licenceClass, state: scanResult.issuingState })}
                   </span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
                   <span className="text-slate-400 block text-[11px] font-medium flex items-center gap-1 mb-1">
-                    <MapPin className="w-3.5 h-3.5 text-amber-400" /> Operating Base
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" /> {t("csm_base")}
                   </span>
                   <span className="text-slate-200 font-semibold">{scanResult.depotLocation}</span>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
                   <span className="text-slate-400 block text-[11px] font-medium flex items-center gap-1 mb-1">
-                    <Calendar className="w-3.5 h-3.5 text-sky-400" /> Induction Completed
+                    <Calendar className="w-3.5 h-3.5 text-sky-400" /> {t("csm_completed")}
                   </span>
                   <span className="text-emerald-400 font-semibold">{scanResult.completedAt}</span>
                 </div>
@@ -246,7 +248,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
               <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
                 <span>
-                  NHVAS chain-of-responsibility requirements satisfied. Heavy vehicle operator cleared to enter loading bays.
+                  {t("csm_nhvas")}
                 </span>
               </div>
             </div>
@@ -260,7 +262,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
             onClick={onClose}
             className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
           >
-            Close Scanner
+            {t("csm_close")}
           </button>
         </div>
       </div>

@@ -282,3 +282,17 @@ CREATE POLICY "audit_logs_insert" ON public.audit_logs FOR INSERT
 DROP POLICY IF EXISTS "quiz_questions_select" ON public.quiz_questions;
 CREATE POLICY "quiz_questions_select" ON public.quiz_questions FOR SELECT
   USING (public.is_admin(auth.uid()));
+
+-- Migration 019: driver password reset help requests
+CREATE TABLE IF NOT EXISTS public.driver_password_reset_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  email text NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'handled')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  handled_at timestamptz,
+  handled_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS driver_password_reset_requests_status_created_idx
+  ON public.driver_password_reset_requests (status, created_at DESC);
+ALTER TABLE public.driver_password_reset_requests ENABLE ROW LEVEL SECURITY;

@@ -1,4 +1,5 @@
 import { useState, FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { AlertTriangle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { DriverSelfRegisterInput } from "../../types";
@@ -11,6 +12,7 @@ interface RegisterFormProps {
 }
 
 export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: RegisterFormProps) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -33,22 +35,25 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!formData.fullName.trim() || formData.fullName.trim().length < 2) {
-      errs.fullName = "Full legal name is required (minimum 2 characters).";
+      errs.fullName = t("reg_err_name");
     }
     if (!formData.email.trim() || !emailRegex.test(formData.email.trim())) {
-      errs.email = "Please enter a complete email address (e.g. driver@domain.com.au).";
+      errs.email = t("reg_err_email");
     }
     if (!formData.phone.trim() || formData.phone.trim().length < 8) {
-      errs.phone = "Please enter a valid mobile number (e.g. 0400 123 456).";
+      errs.phone = t("reg_err_phone");
     }
     if (!formData.address.trim() || formData.address.trim().length < 5) {
-      errs.address = "Please enter your full residential address.";
+      errs.address = t("reg_err_address");
+    }
+    if (!/^[A-Z0-9]{8}$/.test(formData.licenceNumber.trim().toUpperCase())) {
+      errs.licenceNumber = t("reg_err_licence");
     }
     if (formData.password.length < 8) {
-      errs.password = "Password must be at least 8 characters long.";
+      errs.password = t("reg_err_password");
     }
     if (formData.password !== formData.confirmPassword) {
-      errs.confirmPassword = "Passwords do not match.";
+      errs.confirmPassword = t("reg_err_confirm");
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -99,15 +104,14 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
             marginBottom: "10px"
           }}
         >
-          Heavy Vehicle Driver Onboarding
+          {t("reg_badge")}
         </span>
         <h2 style={{ fontSize: "1.65rem", fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.02em" }}>
-          Driver Profile Registration
+          {t("reg_title")}
         </h2>
         <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-          BNT Logistics • Australian HVNL Compliance Portal
-        </p>
-      </div>
+          {t("reg_subtitle")}
+        </p>      </div>
 
       {error && (
         <div
@@ -140,18 +144,18 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
           }}
         >
           <div style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--primary)", marginBottom: "14px" }}>
-            1. Driver Identity & Contact Details
+            {t("reg_s1")}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                Full Legal Name *
+                {t("reg_name")}
               </label>
               <input
                 type="text"
                 className={`form-input ${errors.fullName ? "form-input--error" : ""}`}
-                placeholder="e.g. John Edward Citizen"
+                placeholder={t("reg_name_ph")}
                 value={formData.fullName}
                 onChange={(e) => {
                   setFormData({ ...formData, fullName: e.target.value });
@@ -166,7 +170,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
               <div>
                 <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                  Email Address *
+                  {t("reg_email")}
                 </label>
                 <input
                   type="email"
@@ -185,12 +189,12 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
 
               <div>
                 <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                  Mobile Phone *
+                  {t("reg_phone")}
                 </label>
                 <input
                   type="tel"
                   className={`form-input ${errors.phone ? "form-input--error" : ""}`}
-                  placeholder="0400 123 456"
+                  placeholder={t("reg_phone_ph")}
                   value={formData.phone}
                   onChange={(e) => {
                     setFormData({ ...formData, phone: e.target.value });
@@ -205,12 +209,12 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
 
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                Residential Address *
+                {t("reg_address")}
               </label>
               <input
                 type="text"
                 className={`form-input ${errors.address ? "form-input--error" : ""}`}
-                placeholder="12 Logistics Way, Altona VIC 3018"
+                placeholder={t("reg_address_ph")}
                 value={formData.address}
                 onChange={(e) => {
                   setFormData({ ...formData, address: e.target.value });
@@ -234,13 +238,13 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
           }}
         >
           <div style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--primary)", marginBottom: "14px" }}>
-            2. Heavy Vehicle Licence & Depot Hub Allocation
+            {t("reg_s2")}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                Licence Class
+                {t("reg_licence_class")}
               </label>
               <select
                 className="form-input"
@@ -249,16 +253,16 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
                 disabled={loading}
                 style={{ width: "100%", padding: "10px 14px", borderRadius: "10px" }}
               >
-                <option value="MC">MC - Multi-Combination</option>
-                <option value="HC">HC - Heavy Combination</option>
-                <option value="HR">HR - Heavy Rigid</option>
-                <option value="MR">MR - Medium Rigid</option>
+                <option value="MC">{t("reg_lc_mc")}</option>
+                <option value="HC">{t("reg_lc_hc")}</option>
+                <option value="HR">{t("reg_lc_hr")}</option>
+                <option value="MR">{t("reg_lc_mr")}</option>
               </select>
             </div>
 
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                State of Issue
+                {t("reg_state")}
               </label>
               <select
                 className="form-input"
@@ -267,14 +271,14 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
                 disabled={loading}
                 style={{ width: "100%", padding: "10px 14px", borderRadius: "10px" }}
               >
-                <option value="VIC">VIC - Victoria</option>
-                <option value="NSW">NSW - New South Wales</option>
-                <option value="QLD">QLD - Queensland</option>
-                <option value="SA">SA - South Australia</option>
-                <option value="WA">WA - Western Australia</option>
-                <option value="TAS">TAS - Tasmania</option>
-                <option value="NT">NT - Northern Territory</option>
-                <option value="ACT">ACT - Capital Territory</option>
+                <option value="VIC">{t("reg_state_vic")}</option>
+                <option value="NSW">{t("reg_state_nsw")}</option>
+                <option value="QLD">{t("reg_state_qld")}</option>
+                <option value="SA">{t("reg_state_sa")}</option>
+                <option value="WA">{t("reg_state_wa")}</option>
+                <option value="TAS">{t("reg_state_tas")}</option>
+                <option value="NT">{t("reg_state_nt")}</option>
+                <option value="ACT">{t("reg_state_act")}</option>
               </select>
             </div>
           </div>
@@ -282,22 +286,26 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                Licence Number
+                {t("reg_licence_number")}
               </label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="e.g. 09876543"
+                placeholder={t("reg_licence_ph")}
+                maxLength={8}
+                minLength={8}
                 value={formData.licenceNumber}
-                onChange={(e) => setFormData({ ...formData, licenceNumber: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, licenceNumber: e.target.value.toUpperCase() })}
                 disabled={loading}
                 style={{ width: "100%", padding: "10px 14px", borderRadius: "10px" }}
               />
+              <span style={{ color: "#64748b", fontSize: "0.72rem", marginTop: "4px", display: "block" }}>Enter exactly 8 letters or numbers.</span>
+              {errors.licenceNumber && <span style={{ color: "#ef4444", fontSize: "0.78rem", marginTop: "4px", display: "block" }}>{errors.licenceNumber}</span>}
             </div>
 
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                Assigned Depot Hub
+                {t("reg_depot")}
               </label>
               <select
                 className="form-input"
@@ -306,11 +314,11 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
                 disabled={loading}
                 style={{ width: "100%", padding: "10px 14px", borderRadius: "10px" }}
               >
-                <option value="Melbourne Hub">Melbourne Hub (Altona)</option>
-                <option value="Sydney Hub">Sydney Hub (Eastern Creek)</option>
-                <option value="Brisbane Hub">Brisbane Hub (Rocklea)</option>
-                <option value="Adelaide Hub">Adelaide Hub (Regency Park)</option>
-                <option value="Perth Hub">Perth Hub (Kewdale)</option>
+                <option value="Melbourne Hub">{t("reg_depot_melbourne")}</option>
+                <option value="Sydney Hub">{t("reg_depot_sydney")}</option>
+                <option value="Brisbane Hub">{t("reg_depot_brisbane")}</option>
+                <option value="Adelaide Hub">{t("reg_depot_adelaide")}</option>
+                <option value="Perth Hub">{t("reg_depot_perth")}</option>
               </select>
             </div>
           </div>
@@ -327,7 +335,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
             <div style={{ fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--primary)" }}>
-              3. Account Security Credentials
+              {t("reg_s3")}
             </div>
             <button
               type="button"
@@ -336,7 +344,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
             >
               <span className="flex items-center gap-1">
                 {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>{showPassword ? "Hide Passwords" : "Show Passwords"}</span>
+                <span>{showPassword ? t("reg_hide") : t("reg_show")}</span>
               </span>
             </button>
           </div>
@@ -344,12 +352,12 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                Create Password *
+                {t("reg_password")}
               </label>
               <input
                 type={showPassword ? "text" : "password"}
                 className={`form-input ${errors.password ? "form-input--error" : ""}`}
-                placeholder="Minimum 8 characters"
+                placeholder={t("reg_password_ph")}
                 value={formData.password}
                 onChange={(e) => {
                   setFormData({ ...formData, password: e.target.value });
@@ -363,12 +371,12 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
 
             <div>
               <label className="form-label" style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, marginBottom: "6px" }}>
-                Confirm Password *
+                {t("reg_confirm")}
               </label>
               <input
                 type={showPassword ? "text" : "password"}
                 className={`form-input ${errors.confirmPassword ? "form-input--error" : ""}`}
-                placeholder="Re-enter password"
+                placeholder={t("reg_confirm_ph")}
                 value={formData.confirmPassword}
                 onChange={(e) => {
                   setFormData({ ...formData, confirmPassword: e.target.value });
@@ -409,10 +417,10 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
           {loading ? (
             <>
               <Loader2 style={{ width: 16, height: 16, animation: "spin 1s linear infinite" }} />
-              <span>Creating Account & Setting Up Induction...</span>
+              <span>{t("reg_creating")}</span>
             </>
           ) : (
-            "Complete Registration & Begin Induction →"
+            t("reg_submit")
           )}
         </button>
       </form>
@@ -420,7 +428,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
       {/* Switch to Login */}
       <div style={{ marginTop: "24px", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "18px" }}>
         <span className="muted" style={{ fontSize: "0.88rem", marginRight: "8px" }}>
-          Already have an account?
+          {t("reg_have_account")}
         </span>
         <button
           type="button"
@@ -434,7 +442,7 @@ export function RegisterForm({ onRegister, onSwitchToLogin, loading, error }: Re
             fontSize: "0.88rem"
           }}
         >
-          Return to Login →
+          {t("reg_return")}
         </button>
       </div>
     </motion.div>

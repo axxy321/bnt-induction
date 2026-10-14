@@ -1,60 +1,17 @@
-import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { api, getInductionVersion } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import type { Session } from "@supabase/supabase-js";
-import {
+import type {
   AdminOverview,
-  CertificateVerificationResult,
   DriverBundle,
   DriverSelfRegisterInput,
   InductionVersion,
   QuizQuestion,
-  QuizSubmitResult,
   SessionState
 } from "../types";
-
-interface DriverFormInput {
-  fullName: string;
-  email: string;
-  phone: string;
-  address: string;
-  preferredLanguage: string;
-}
-
-interface AppContextValue {
-  session: SessionState | null;
-  driverBundle: DriverBundle | null;
-  adminOverview: AdminOverview | null;
-  quizQuestions: QuizQuestion[];
-  inductionVersion: InductionVersion | null;
-  loading: boolean;
-  authLoading: boolean;
-  authError: string | null;
-  login: (input: { email: string; password: string; role: "driver" | "admin" }) => Promise<void>;
-  logout: () => Promise<void>;
-  refreshDriverBundle: () => Promise<void>;
-  refreshAdminOverview: () => Promise<void>;
-  saveProfile: (input: DriverFormInput) => Promise<DriverBundle>;
-  uploadDocument: (input: { type: string; file: File }, onProgress?: (progress: number) => void) => Promise<void>;
-  saveStep: (step: number, payload?: Record<string, unknown>) => Promise<DriverBundle>;
-  startVideoSection: (sectionId: string) => Promise<void>;
-  submitQuiz: (answers: Record<number, number>) => Promise<QuizSubmitResult>;
-  submitDriverFeedback: (input: { clarityRating: number; issues: string }) => Promise<DriverBundle>;
-  generateCertificate: () => Promise<{ pdfBase64: string }>;
-  createDriver: (input: DriverFormInput & { password: string }) => Promise<void>;
-  registerDriver: (input: DriverSelfRegisterInput) => Promise<void>;
-  updateDriverByAdmin: (driverId: string, input: DriverFormInput) => Promise<void>;
-  resetDriverPassword: (driverId: string, password: string) => Promise<void>;
-  resetDriverInduction: (driverId: string) => Promise<void>;
-  deleteDriver: (driverId: string) => Promise<void>;
-  exportAdminReport: (
-    format: "csv" | "pdf",
-    options?: { from?: string; to?: string; scope?: "drivers" | "audit"; driverId?: string }
-  ) => Promise<Blob>;
-  verifyCertificate: (code: string) => Promise<CertificateVerificationResult>;
-}
-
-const AppContext = createContext<AppContextValue | undefined>(undefined);
+import { AppContext, type AppContextValue, type DriverCreateResult, type DriverFormInput } from "./AppContext";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionState | null>(null);
@@ -270,10 +227,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return result;
   }, [session]);
 
-  const createDriver = useCallback(async (input: DriverFormInput & { password: string }) => {
+  const createDriver = useCallback(async (input: DriverFormInput & { password: string }): Promise<DriverCreateResult> => {
     if (!session) throw new Error("You are not logged in.");
-    await api.createDriver(session, input);
+    const result = await api.createDriver(session, input);
     await refreshAdminOverview();
+    return result;
   }, [session, refreshAdminOverview]);
 
   const registerDriver = useCallback(async (input: DriverSelfRegisterInput) => {
@@ -287,10 +245,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await refreshAdminOverview();
   }, [session, refreshAdminOverview]);
 
-  const resetDriverPassword = useCallback(async (driverId: string, password: string) => {
+  const resetDriverPassword = useCallback(async (driverId: string, password: string): Promise<DriverCreateResult> => {
     if (!session) throw new Error("You are not logged in.");
-    await api.resetDriverPassword(session, driverId, password);
+    const result = await api.resetDriverPassword(session, driverId, password);
     await refreshAdminOverview();
+    return result;
   }, [session, refreshAdminOverview]);
 
   const deleteDriver = useCallback(async (driverId: string) => {
@@ -299,9 +258,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await refreshAdminOverview();
   }, [session, refreshAdminOverview]);
 
-  const resetDriverInduction = useCallback(async (driverId: string) => {
+const resetDriverInduction = useCallback(async (driverId: string) => {
     if (!session) throw new Error("You are not logged in.");
     await api.resetDriverInduction(session, driverId);
+    await refreshAdminOverview();
+  }, [session, refreshAdminOverview]);
+
+  const revokeDriverInduction = useCallback(async (driverId: string, reason?: string, certificateId?: string) => {
+    if (!session) throw new Error("You are not logged in.");
+    await api.revokeDriverInduction(session, driverId, reason || "Admin revoked induction", certificateId);
+    await refreshAdminOverview();
+  }, [session, refreshAdminOverview]);
+
+  const archiveDriver = useCallback(async (driverId: string) => {
+    if (!session) throw new Error("You are not logged in.");
+    await api.archiveDriver(session, driverId);
+    await refreshAdminOverview();
+  }, [session, refreshAdminOverview]);
+
+  const restoreDriver = useCallback(async (driverId: string) => {
+    if (!session) throw new Error("You are not logged in.");
+    await api.restoreDriver(session, driverId);
+    await refreshAdminOverview();
+  }, [session, refreshAdminOverview]);
+
+  const bulkArchiveDrivers = useCallback(async (driverIds: string[]) => {
+    if (!session) throw new Error("You are not logged in.");
+    await api.bulkArchiveDrivers(session, driverIds);
+    await refreshAdminOverview();
+  }, [session, refreshAdminOverview]);
+
+  const bulkRestoreDrivers = useCallback(async (driverIds: string[]) => {
+    if (!session) throw new Error("You are not logged in.");
+    await api.bulkRestoreDrivers(session, driverIds);
     await refreshAdminOverview();
   }, [session, refreshAdminOverview]);
 
@@ -317,7 +306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return await api.verifyCertificate(code);
   }, []);
 
-  const value = useMemo<AppContextValue>(
+const value = useMemo<AppContextValue>(
     () => ({
       session,
       driverBundle,
@@ -343,24 +332,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateDriverByAdmin,
       resetDriverPassword,
       resetDriverInduction,
+      revokeDriverInduction,
+      archiveDriver,
+      restoreDriver,
+      bulkArchiveDrivers,
+      bulkRestoreDrivers,
       deleteDriver,
       exportAdminReport,
       verifyCertificate
     }),
-    [
+[
       session, driverBundle, adminOverview, quizQuestions, inductionVersion, loading, authLoading,
       login, logout, refreshDriverBundle, refreshAdminOverview, saveProfile, uploadDriverDocument,
       saveDriverStep, startDriverVideoSection, submitDriverQuiz, submitDriverFeedback, generateDriverCertificate,
       createDriver, registerDriver, updateDriverByAdmin, resetDriverPassword,
-      resetDriverInduction, deleteDriver, exportAdminReport, verifyCertificate
+      resetDriverInduction, revokeDriverInduction, archiveDriver, restoreDriver, bulkArchiveDrivers, bulkRestoreDrivers, deleteDriver, exportAdminReport, verifyCertificate
     ]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
-export function useAppState() {
-  const context = useContext(AppContext);
-  if (!context) throw new Error("useAppState must be used inside AppProvider.");
-  return context;
-}
+

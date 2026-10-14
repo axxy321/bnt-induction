@@ -90,6 +90,9 @@ export interface LearningSectionProgress {
   videoUrl?: string;
   completed: boolean;
   completedAt: string | null;
+  mediaJson?: Record<string, unknown>;
+  videoDurationSeconds?: number;
+  requireFullWatch?: boolean;
 }
 
 export interface ProgressState {
@@ -110,6 +113,15 @@ export interface QuizQuestion {
   explanation: string;
   category?: string;
   isCritical?: boolean;
+  correctAnswer?: number;
+  correct_answer?: number;
+  correctAnswers?: number[];
+  questionType?: string;
+  question_type?: string;
+  placement?: string;
+  sortOrder?: number;
+  sort_order?: number;
+  acceptedAnswers?: number[];
 }
 
 export interface QuizAttempt {
@@ -181,6 +193,7 @@ export interface AdminDriverRow extends DriverProfile {
   lastActivityAt: string | null;
   feedback: DriverFeedback | null;
   completionHours: number | null;
+  archivedAt: string | null;
 }
 
 export interface AdminOverview {
@@ -193,6 +206,10 @@ export interface AdminOverview {
     completionRate: number;
     averageQuizScore: number;
     averageCompletionHours: number;
+    certificateRate: number;
+    certificateCount: number;
+    licenceRate: number;
+    licenceCount: number;
   };
   charts: {
     completionTrend: Array<{ label: string; value: number }>;
@@ -210,17 +227,38 @@ export interface AdminOverview {
 
 export interface CertificateVerificationResult {
   verified: boolean;
+  valid?: boolean;
   organizationName?: string;
+  message?: string;
+  driverName?: string;
+  certificateId?: string;
+  verificationCode?: string;
+  issuedAt?: string;
+  expiresAt?: string | null;
+  licenceClass?: string | null;
+  issuingState?: string | null;
+  depotLocation?: string | null;
   certificate?: {
     completionId: string;
     verificationCode: string;
     verificationUrl: string;
     issuedAt: string;
+    expiresAt?: string | null;
   };
   driver?: {
     fullName: string;
   };
-  message?: string;
+}
+
+export interface QuizQuestionResult {
+  id: number;
+  category?: string;
+  isCritical?: boolean;
+  correct: boolean;
+  // Only populated when the attempt passed, so a failed attempt
+  // never reveals the correct answer to the driver.
+  correctAnswer?: number;
+  explanation?: string;
 }
 
 export interface QuizSubmitResult {
@@ -228,6 +266,8 @@ export interface QuizSubmitResult {
   passed: boolean;
   attempt?: QuizAttempt;
   questions?: Array<{ id: number; explanation: string; correctAnswer: number }>;
+  results?: QuizQuestionResult[];
+  retryAt?: string;
   state?: DriverBundle;
   categoryScores?: Record<string, number>;
   failedCritical?: boolean;
@@ -256,6 +296,21 @@ export interface InductionVersionRecord {
   createdAt: string;
 }
 
+export interface InductionCourse {
+  id: string;
+  title: string;
+  description: string;
+  templateId: string | null;
+  versionLabel: string;
+  revisionNotes: string;
+  isTemplate: boolean;
+  isCurrent: boolean;
+  siteTag: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ============================================================
 // BNT LOGISTICS COMPLIANCE & FLEET MANAGEMENT TYPES
 // ============================================================
@@ -270,7 +325,6 @@ export interface ComplianceAudit {
   assignedModule: string;
   status: AuditStatus;
   attemptsCount: number;
-  commentsCount: number;
   description: string;
   lastAttemptDate?: string | null;
 }
@@ -291,6 +345,45 @@ export interface SOPItem {
   quizQuestionsCount?: number;
 }
 
+// ============================================================
+// COMPLIANCE AUDITS (admin-assigned safety audits)
+// ============================================================
+
+export type ComplianceAuditCategory =
+  | "Transport"
+  | "Work Health & Safety"
+  | "Operational Risk"
+  | "Fleet Compliance";
+
+export type AuditAssignmentStatus = "No Attempt" | "In Progress" | "Passed" | "Action Required";
+
+export interface ComplianceAuditRecord {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  questions: string[];
+  dueDate: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface AuditAssignment {
+  id: string;
+  auditId: string;
+  audit: ComplianceAuditRecord;
+  status: AuditAssignmentStatus;
+  dueDate: string | null;
+  attemptsCount: number;
+  lastAttemptDate: string | null;
+  completedAt: string | null;
+}
+
+export interface AdminAuditAssignmentRow extends AuditAssignment {
+  driverName: string;
+  driverEmail: string;
+}
+
 export type ComplianceDocCategory = "Licence" | "Insurance" | "Certificates" | "SLA / Contract";
 export type ComplianceDocStatus = "Approved" | "Pending" | "Expired" | "Action Required" | "Not Submitted";
 
@@ -306,6 +399,7 @@ export interface ComplianceDocumentRequirement {
   uploadedFileName?: string | null;
   uploadedAt?: string | null;
   rejectionReason?: string | null;
+  documentType?: string | null;
 }
 
 export interface VehicleRecord {
@@ -324,6 +418,43 @@ export interface VehicleRecord {
   status: "Active" | "Inactive" | "Maintenance Required";
   qrPassCode: string;
   contactNumber?: string;
+}
+
+export interface VehiclePassVerificationResult {
+  verified: boolean;
+  message?: string;
+  organizationName?: string;
+  vehicle?: {
+    passCode: string;
+    rego: string;
+    makeModel: string;
+    bodyType?: string | null;
+    branchName?: string | null;
+    status: string;
+    regoExpiryDate?: string | null;
+    dgExpiryDate?: string | null;
+    scbaServiceDueDate?: string | null;
+  };
+  driver?: {
+    fullName: string;
+    email: string;
+  };
+}
+
+export interface DriverVerificationResult {
+  verified: boolean;
+  message?: string;
+  organizationName?: string;
+  driver?: {
+    driverId: string;
+    fullName: string;
+    phone?: string;
+    licenceClass?: string;
+    inductionStatus: string;
+    inductionCompleted: boolean;
+    completedAt?: string | null;
+    certificateExpiresAt?: string | null;
+  };
 }
 
 export interface ComplianceOverview {
@@ -347,8 +478,10 @@ export interface ContractorCompanyRecord {
   nhvasNumber: string;
   publicLiabilityPolicy: string;
   publicLiabilityExpiry: string;
+  publicLiabilityFileUrl?: string | null;
   workersCompPolicy: string;
   workersCompExpiry: string;
+  workersCompFileUrl?: string | null;
   primaryDepot: string;
   status: "Compliant" | "Pending Review" | "Suspended";
 }
@@ -386,10 +519,11 @@ export interface SiteCheckinRecord {
 
 export interface PreTripCheckItem {
   id: string;
-  category: "Tyres & Wheels" | "Brakes & Air" | "Lights & Visual" | "Coupling & Pin" | "Load Restraint" | "Fluids & Engine";
+  category: string;
   label: string;
   status: "Pass" | "Defect";
   notes?: string;
+  photos?: string[];
 }
 
 export interface PreTripInspectionRecord {
@@ -405,4 +539,324 @@ export interface PreTripInspectionRecord {
   driverSignature: string;
 }
 
+// --- Worksite Management ---
+export interface WorksiteRecord {
+  id: string;
+  name: string;
+  address: string;
+  siteCode: string;
+  qrToken: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
+export interface WorksiteAttendanceRecord {
+  id: string;
+  worksiteId: string;
+  worksiteName: string;
+  userId: string;
+  driverName: string;
+  signinPhotoUrl: string;
+  signinAt: string;
+  signoutAt: string | null;
+  signoutPhotoUrl: string | null;
+  status: string;
+  durationMinutes: number | null;
+}
+
+export interface WorksiteAttendanceReport {
+  driverId: string;
+  driverName: string;
+  worksiteId: string;
+  worksiteName: string;
+  verificationCode: string;
+  signinAt: string;
+  signoutAt: string | null;
+  status: string;
+  durationMinutes: number | null;
+  signinPhotoUrl: string | null;
+  signoutPhotoUrl: string | null;
+}
+
+export interface InductionScheduleInvitation {
+  id: string;
+  enrollmentId: string;
+  scheduleItemId: string;
+  deliveryMethod: string;
+  status: "pending" | "sent" | "delivered" | "opened" | "clicked" | "failed" | "bounced";
+  metadata: {
+    driver_email: string;
+    driver_name: string;
+    item_title: string;
+    schedule_name: string;
+    due_date?: string;
+    expiry_interval?: string;
+  };
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// INDUCTION SCHEDULES
+// ============================================================
+
+export interface InductionSchedule {
+  id: string;
+  name: string;
+  description: string;
+  isActive: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InductionScheduleItem {
+  id: string;
+  scheduleId: string;
+  courseId: string | null;
+  title: string;
+  sequenceOrder: number;
+  delayType: "after_completion" | "after_enrollment" | "fixed_date";
+  delayDays: number;
+  fixedDate: string | null;
+  expiryInterval: string | null;
+  isRequired: boolean;
+  createdAt: string;
+  updatedAt: string;
+  course?: InductionCourse;
+}
+
+export interface InductionScheduleEnrollment {
+  id: string;
+  scheduleId: string;
+  driverId: string;
+  enrolledAt: string;
+  enrolledBy: string | null;
+  status: "active" | "completed" | "cancelled" | "paused";
+  currentItemIndex: number;
+  completedAt: string | null;
+  driver?: DriverProfile;
+  schedule?: InductionSchedule;
+  enrolledByProfile?: { id: string; email: string; fullName: string };
+}
+
+// ============================================================
+// SITE INDUCTION COURSES - SLIDES & QUESTIONS
+// ============================================================
+
+export interface InductionSlide {
+  id: string;
+  courseId: string;
+  slideOrder: number;
+  slideType: string;
+  title: string;
+  contentJson: Record<string, any>;
+  siteTag: string;
+  videoUrl: string | null;
+  audioUrl: string | null;
+  forcedWaitSeconds: number;
+  estimatedDurationSeconds: number;
+  triggerConfig: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SlideExtras {
+  mediaJson?: Record<string, unknown>;
+  documents?: Array<{ url: string; title?: string; name?: string; requireRead?: boolean; pages?: number }>;
+  questions?: SlideQuestion[];
+  images?: Array<{ url: string; caption?: string; alt?: string }>;
+  attachments?: Array<{ url: string; name?: string }>;
+  voiceover?: { url: string };
+  warning?: string;
+  textSize?: string;
+  videoUrl?: string;
+  audioUrl?: string;
+  forcedWaitSeconds?: number;
+  estimatedDurationSeconds?: number;
+  triggerConfig?: Record<string, unknown>;
+}
+
+export interface SlideQuestion {
+  id: string;
+  question: string;
+  prompt?: string;
+  options: string[];
+  correctAnswer: number;
+  correct_answer?: number;
+  correctAnswers?: number[];
+  explanation: string;
+  category: string;
+  isCritical: boolean;
+  is_critical?: boolean;
+  questionType: "single_choice" | "text_input" | "multiple_choice";
+  question_type?: string;
+  placement: "separate_page" | "below_slide";
+  sortOrder: number;
+  sort_order?: number;
+  acceptedAnswers?: string[];
+}
+
+// ============================================================
+// BRANDING & POLICIES
+// ============================================================
+
+export interface BrandingSettings {
+  id: string;
+  organizationName: string;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: string;
+  customCss: string;
+  createdAt: string;
+  updatedAt: string;
+  companyName?: string;
+  welcomeText?: string;
+  logoPath?: string | null;
+}
+
+export interface PolicyRecord {
+  id: string;
+  title: string;
+  description: string;
+  version: string;
+  status: "draft" | "published" | "archived";
+  content: string;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+  versionId: string;
+  name: string;
+  versionLabel: string;
+  signed: boolean;
+}
+
+export interface PolicyListItem {
+  id: string;
+  title: string;
+  version: string;
+  status: "draft" | "published" | "archived";
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+  signatureCount: number;
+  totalDrivers: number;
+  policyId: string;
+  name: string;
+  versionLabel: string;
+  signedCount: number;
+}
+
+export interface PolicySignatureSummary {
+  policyId: string;
+  policyTitle: string;
+  policyVersion: string;
+  signedCount: number;
+  pendingCount: number;
+  totalDrivers: number;
+  driverId?: string;
+  signedAt: string;
+  driverName: string;
+  driverEmail: string;
+  signatureText: string;
+}
+
+export interface PolicyPendingDriver {
+  id: string;
+  fullName: string;
+  email: string;
+  depotLocation: string;
+  driverId?: string;
+  driverName?: string;
+  driverEmail?: string;
+}
+
+// ============================================================
+// REPORTS
+// ============================================================
+
+export interface ReportsOverview {
+  totalDrivers: number;
+  completedInductions: number;
+  pendingInductions: number;
+  certificatesIssued: number;
+  documentsPending: number;
+  expiringSoon: number;
+  attemptedInductions?: number;
+  validCertificates?: number;
+  expiringCertificates?: number;
+  expiredCertificates?: number;
+  expiringDocuments?: number;
+  pendingApprovals?: number;
+  activeSchedules?: number;
+  overdueSchedules?: number;
+}
+
+export interface AttemptedInductionReport {
+  driverId: string;
+  driverName: string;
+  email: string;
+  inductionTitle: string;
+  attemptDate: string;
+  score: number;
+  passed: boolean;
+  status: string;
+}
+
+export interface CertificateStatusReport {
+  driverId: string;
+  driverName: string;
+  email: string;
+  certificateId: string;
+  issuedAt: string;
+  expiresAt: string | null;
+  status: "valid" | "expiring" | "expired";
+  verificationCode: string;
+}
+
+export interface ExpiringCertificateReport {
+  driverId: string;
+  driverName: string;
+  email: string;
+  certificateId: string;
+  expiresAt: string;
+  daysUntilExpiry: number;
+}
+
+export interface ExpiringDocumentReport {
+  driverId: string;
+  driverName: string;
+  email: string;
+  documentType: string;
+  documentName: string;
+  expiresAt: string;
+  daysUntilExpiry: number;
+}
+
+export interface DocumentApprovalReport {
+  driverId: string;
+  driverName: string;
+  email: string;
+  documentType: string;
+  documentName: string;
+  uploadedAt: string;
+  status: "pending" | "approved" | "rejected";
+}
+
+export interface ScheduledStatusReport {
+  driverId: string;
+  driverName: string;
+  email: string;
+  scheduleName: string;
+  currentItem: string;
+  status: "active" | "completed" | "cancelled" | "paused";
+  enrolledAt: string;
+  completedAt: string | null;
+}

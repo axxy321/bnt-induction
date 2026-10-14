@@ -3,25 +3,53 @@ import { createCertificatePdf } from "./certificate";
 import { apiBaseUrl, organizationName, supabase, supabaseUrl, supabaseAnonKey } from "./supabase";
 import {
   AdminOverview,
+  AdminAuditAssignmentRow,
+  AuditAssignment,
+  AuditAssignmentStatus,
   AuditLog,
+  BrandingSettings,
   CertificateRecord,
   CertificateVerificationResult,
+  ComplianceAuditRecord,
   ContractorCompanyRecord,
+  DriverVerificationResult,
   DocumentType,
   DriverBundle,
   DriverFeedback,
   DriverSelfRegisterInput,
   InductionVersion,
   InductionVersionRecord,
+  InductionScheduleInvitation,
+  InductionCourse,
+  InductionSchedule,
+  InductionScheduleEnrollment,
+  InductionScheduleItem,
+  InductionSlide,
+  SlideQuestion,
   LearningSectionProgress,
+  PolicyListItem,
+  PolicyRecord,
+  PolicySignatureSummary,
+  PolicyPendingDriver,
   QuizQuestion,
   QuizSubmitResult,
+  ReportsOverview,
+  AttemptedInductionReport,
+  CertificateStatusReport,
+  ExpiringCertificateReport,
+  ExpiringDocumentReport,
+  DocumentApprovalReport,
+  ScheduledStatusReport,
   SafetyIncidentRecord,
   PreTripInspectionRecord,
   SessionState,
   SiteCheckinRecord,
+  SOPItem,
+  VehiclePassVerificationResult,
   VehicleRecord
 } from "../types";
+
+console.log("[API] SUPABASE_URL:", supabaseUrl);
 
 const bucketName = "driver-documents";
 
@@ -199,6 +227,36 @@ export const api = {
     } satisfies DriverBundle;
   },
 
+  async checkLicenceUnique(licenceNumber: string, issuingState: string, excludeUserId?: string) {
+    if (!licenceNumber || !issuingState) return { unique: true };
+    try {
+      const trimmed = licenceNumber.trim().toUpperCase();
+      if (!trimmed) return { unique: true };
+
+      let query = supabase
+        .from("profiles")
+        .select("id, full_name, licence_number, issuing_state")
+        .eq("licence_number", trimmed)
+        .eq("issuing_state", issuingState)
+        .limit(1);
+
+      if (excludeUserId) {
+        query = query.neq("id", excludeUserId);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.warn("Licence uniqueness check warning:", error);
+        return { unique: true };
+      }
+
+      return { unique: !(data && data.length > 0) };
+    } catch (e) {
+      console.warn("Licence uniqueness check failed:", e);
+      return { unique: true };
+    }
+  },
+
   async saveProfile(session: SessionState, input: {
     fullName: string;
     email: string;
@@ -278,8 +336,9 @@ export const api = {
   },
 
   async saveStep(session: SessionState, step: number, payload: Record<string, unknown>) {
+    let response: Response;
     try {
-      const response = await fetch(`${apiBaseUrl}/induction/step`, {
+      response = await fetch(`${apiBaseUrl}/induction/step`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -287,116 +346,20 @@ export const api = {
         },
         body: JSON.stringify({ step, payload })
       });
-      if (response.ok) {
-        return await api.getDriverProfile(session);
-      }
     } catch {
-      // Direct Supabase fallback when Express backend is offline / Vercel edge hosting
+      throw new Error("Unable to save induction progress. Check your connection and try again.");
     }
-
-    const userId = session.user.id;
-
-    // 1. Fetch current progress
-    let currentStep = 1;
-    let completedStepIds: number[] = [];
-
-    try {
-      const { data: prog } = await supabase
-        .from("induction_progress")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (prog) {
-        currentStep = prog.current_step || 1;
-        completedStepIds = Array.isArray(prog.completed_step_ids) ? prog.completed_step_ids : [];
-      }
-    } catch (e) {
-      console.warn("Error reading induction progress:", e);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Induction progress was not accepted.");
     }
-
-    // If step 3 and partial save, handle section completions
-    if (step === 3 && Array.isArray(payload.sections)) {
-      for (const sec of payload.sections as Array<{ sectionId: string; completed: boolean }>) {
-        try {
-          await supabase
-            .from("learning_section_completions")
-            .upsert({
-              user_id: userId,
-              section_id: sec.sectionId,
-              section_version: "1.0",
-              completed: Boolean(sec.completed),
-              completed_at: sec.completed ? new Date().toISOString() : null
-            }, { onConflict: "user_id,section_id,section_version" });
-        } catch (e) {
-          console.warn("learning_section_completions upsert warning:", e);
-        }
-      }
-
-      if (payload.allowPartial) {
-        return await api.getDriverProfile(session);
-      }
-    }
-
-    const completed = new Set<number>(completedStepIds);
-    completed.add(step);
-
-    const nextStep = step >= 5 ? 6 : Math.max(currentStep, step + 1);
-    const newPercentage = Math.round((completed.size / 6) * 100);
-
-    const progressUpdate: Record<string, unknown> = {
-      user_id: userId,
-      current_step: nextStep,
-      completion_percentage: newPercentage,
-      completed_step_ids: Array.from(completed),
-      updated_at: new Date().toISOString()
-    };
-
-    if (step === 5) {
-      progressUpdate.declaration_accepted = true;
-      progressUpdate.declaration_agreed_at = new Date().toISOString();
-      if (payload.signature) {
-        progressUpdate.signature = String(payload.signature);
-      }
-      progressUpdate.completed = true;
-      progressUpdate.completed_at = new Date().toISOString();
-    }
-
-    // Upsert into induction_progress
-    try {
-      await supabase
-        .from("induction_progress")
-        .upsert(progressUpdate, { onConflict: "user_id" });
-    } catch (e) {
-      console.warn("induction_progress direct upsert warning:", e);
-    }
-
-    // Update drivers table status
-    try {
-      const newStatus = step >= 5 ? "Completed" : "In Progress";
-      await supabase
-        .from("drivers")
-        .upsert({
-          user_id: userId,
-          status: newStatus
-        }, { onConflict: "user_id" });
-    } catch (e) {
-      console.warn("drivers table direct upsert warning:", e);
-    }
-
-    // Log audit event
-    await logAuditEvent(userId, "step_completed", {
-      step,
-      nextStep,
-      completionPercentage: newPercentage
-    }).catch(() => {});
-
     return await api.getDriverProfile(session);
   },
 
   async startVideoSection(session: SessionState, sectionId: string) {
+    let response: Response;
     try {
-      const response = await fetch(`${apiBaseUrl}/induction/section/start`, {
+      response = await fetch(`${apiBaseUrl}/induction/section/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -404,68 +367,33 @@ export const api = {
         },
         body: JSON.stringify({ sectionId })
       });
-      if (response.ok) return;
-    } catch {}
-
-    // Direct Supabase fallback
-    try {
-      await supabase
-        .from("learning_section_completions")
-        .upsert({
-          user_id: session.user.id,
-          section_id: sectionId,
-          section_version: "1.0",
-          section_started_at: new Date().toISOString(),
-          completed: false
-        }, { onConflict: "user_id,section_id,section_version" });
-    } catch (e) {
-      console.warn("startVideoSection direct Supabase fallback warning:", e);
+    } catch {
+      throw new Error("Unable to record the module start. Check your connection and try again.");
     }
+    if (!response.ok) throw new Error("Unable to record the module start.");
   },
 
   async getQuizQuestions(session?: SessionState) {
     if (!session) throw new Error("Unauthorized");
 
-    // Direct Supabase query (select columns that exist in public.quiz_questions)
-    try {
-      const { data: dbQuestions, error } = await supabase
-        .from("quiz_questions")
-        .select("id, question, options, explanation, correct_answer, sort_order")
-        .order("sort_order", { ascending: true });
-
-      if (!error && dbQuestions && dbQuestions.length > 0) {
-        return {
-          questions: dbQuestions.map((item: any, index: number) => ({
-            id: item.id,
-            question: item.question,
-            options: Array.isArray(item.options) ? item.options.map(String) : [],
-            explanation: item.explanation,
-            category: "Heavy Vehicle & CoR",
-            isCritical: index === 0 || index === 3
-          })) satisfies QuizQuestion[]
-        };
-      }
-    } catch {}
-
-    // Fallback to Express backend if available
-    try {
-      const response = await fetch(`${apiBaseUrl}/induction/quiz-questions`, {
-        headers: { Authorization: `Bearer ${session.accessToken}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          questions: data.map((item: any) => ({
-            id: item.id,
-            question: item.question,
-            options: Array.isArray(item.options) ? item.options.map(String) : [],
-            explanation: item.explanation,
-            category: item.category ?? "General",
-            isCritical: Boolean(item.is_critical)
-          })) satisfies QuizQuestion[]
-        };
-      }
-    } catch {}
+    // Always load questions through the backend. The API strips
+    // correct_answer/explanation so drivers cannot inspect the answer key.
+    const response = await fetch(`${apiBaseUrl}/induction/quiz-questions`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        questions: data.map((item: any) => ({
+          id: item.id,
+          question: item.question,
+          options: Array.isArray(item.options) ? item.options.map(String) : [],
+          explanation: item.explanation,
+          category: item.category ?? "General",
+          isCritical: Boolean(item.is_critical)
+        })) satisfies QuizQuestion[]
+      };
+    }
 
     throw new Error("Unable to load the knowledge check questions. Check your connection and try again.");
   },
@@ -476,80 +404,31 @@ export const api = {
       Authorization: `Bearer ${session.accessToken}`
     };
 
-    try {
-      const response = await fetch(`${apiBaseUrl}/induction/quiz`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ answers })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const state = await api.getDriverProfile(session);
-        return { ...data, state } satisfies QuizSubmitResult;
-      }
-      console.warn("Quiz submission via Express API returned status", response.status);
-    } catch {
-      // Fallback to client-side / Supabase grading if Express API backend is offline
-    }
+    // Grading always happens on the server so the answer key never
+    // reaches the browser. If the API is unreachable we fail closed
+    // instead of grading locally.
+    const response = await fetch(`${apiBaseUrl}/induction/quiz`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ answers })
+    });
 
-    // Direct Supabase Grading Fallback
-    try {
-      const { data: dbQuestions, error: qErr } = await supabase.from("quiz_questions").select("*");
-      if (qErr || !dbQuestions || dbQuestions.length === 0) {
-        throw new Error("Unable to load quiz questions for grading.");
-      }
-
-      let correctCount = 0;
-      const totalQuestions = dbQuestions.length;
-
-      for (const q of dbQuestions) {
-        const userAns = answers[q.id] ?? answers[String(q.id)];
-        if (userAns !== undefined && Number(userAns) === Number(q.correct_answer)) {
-          correctCount++;
-        }
-      }
-
-      const score = Math.round((correctCount / totalQuestions) * 100);
-      const passed = score >= 70;
-
-      // Save attempt to Supabase
+    if (!response.ok) {
+      let message = "Quiz submission failed. Please try again.";
+      let retryAt: string | undefined;
       try {
-        await supabase.from("quiz_attempts").insert({
-          user_id: session.user.id,
-          score,
-          passed,
-          answers
-        });
-      } catch (e) {
-        console.warn("Quiz attempt save warning:", e);
-      }
-
-      // Update progress if passed
-      if (passed) {
-        try {
-          const currentProgress = await getProgressRow(session.user.id);
-          const nextSteps = Array.from(new Set([...(currentProgress.completed_step_ids || []), 4]));
-          await supabase.from("induction_progress").upsert({
-            user_id: session.user.id,
-            quiz_score: score,
-            current_step: Math.max(currentProgress.current_step, 5),
-            completed_step_ids: nextSteps,
-            updated_at: new Date().toISOString()
-          });
-        } catch (e) {
-          console.warn("Progress update warning:", e);
-        }
-      }
-
-      const state = await api.getDriverProfile(session);
-      return {
-        score,
-        passed,
-        state
-      } satisfies QuizSubmitResult;
-    } catch (err: any) {
-      throw new Error(err?.message || "Quiz grading failed. Check your connection and try again.");
+        const data = await response.json();
+        if (data?.message) message = data.message;
+        if (data?.retryAt) retryAt = data.retryAt;
+      } catch {}
+      const error = new Error(message);
+      (error as any).retryAt = retryAt;
+      throw error;
     }
+
+    const data = await response.json();
+    const state = await api.getDriverProfile(session);
+    return { ...data, state } satisfies QuizSubmitResult;
   },
 
   async uploadDocument(
@@ -638,106 +517,70 @@ export const api = {
   },
 
   async generateCertificate(session: SessionState) {
-    try {
-      const response = await fetch(`${apiBaseUrl}/induction/certificate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.accessToken}`
-        }
-      });
-      if (response.ok) {
-        const bundle = await api.getDriverProfile(session);
-        const cert = bundle.certificate;
-        if (cert) {
-          return {
-            pdfBase64: buildCertificatePdf(
-              bundle.driver.fullName || "Driver",
-              cert.completionId,
-              cert.issuedAt,
-              cert.verificationUrl,
-              bundle.driver.licenceClass,
-              bundle.driver.issuingState,
-              bundle.driver.depotLocation
-            ),
-            state: bundle
-          };
-        }
+    // Certificates are issued only by the server, which verifies that
+    // every induction step is complete and all mandatory documents are
+    // approved and current. If the API is unreachable we fail closed
+    // instead of minting a certificate locally.
+    const response = await fetch(`${apiBaseUrl}/induction/certificate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`
       }
-    } catch {
-      // Backend offline or error; proceed with Supabase direct flow
+    });
+
+    if (!response.ok) {
+      let message = "Unable to issue the certificate. Please try again.";
+      try {
+        const data = await response.json();
+        if (data?.message) message = data.message;
+      } catch {}
+      throw new Error(message);
     }
 
-    const userId = session.user.id;
-    const completionCode = `COMP-${userId.slice(0, 8).toUpperCase()}`;
-    const verifyCode = `VERIFY-${userId.slice(0, 8)}`;
-    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
-    const verifyUrl = `${origin}/certificate/verify/${verifyCode}`;
-    const issuedAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 365 * 86400000).toISOString();
-
-    // Direct Supabase upsert to certificates
+    // The server returns the certificate it just issued. Prefer it over a
+    // second read of the certificates table, which can lag or be blocked by
+    // row-level security on some deployments.
+    let serverCertificate: any = null;
     try {
-      await supabase.from("certificates").upsert(
-        {
-          user_id: userId,
-          completion_id: completionCode,
-          verification_code: verifyCode,
-          verification_url: verifyUrl,
-          issued_at: issuedAt,
-          expires_at: expiresAt
-        },
-        { onConflict: "user_id" }
-      );
-    } catch (e) {
-      console.warn("Certificate upsert warning:", e);
-    }
-
-    // Direct Supabase upsert to induction_progress
-    try {
-      const currentProgress = await getProgressRow(userId);
-      const nextSteps = Array.from(new Set([...(currentProgress.completed_step_ids || []), 5, 6]));
-      await supabase.from("induction_progress").upsert(
-        {
-          user_id: userId,
-          completed: true,
-          completed_at: issuedAt,
-          current_step: 6,
-          completion_percentage: 100,
-          completed_step_ids: nextSteps,
-          updated_at: issuedAt
-        },
-        { onConflict: "user_id" }
-      );
-    } catch (e) {
-      console.warn("Induction completion update warning:", e);
-    }
+      const data = await response.json();
+      serverCertificate = data?.certificate ?? null;
+    } catch {}
 
     const bundle = await api.getDriverProfile(session);
-    const certificateRecord: CertificateRecord = bundle.certificate ?? {
-      id: `cert-${userId}`,
-      driverId: userId,
-      completionId: completionCode,
-      verificationCode: verifyCode,
-      verificationUrl: verifyUrl,
-      issuedAt,
-      expiresAt
-    };
+
+    let cert = bundle.certificate;
+    if (!cert && serverCertificate) {
+      cert = {
+        id: "",
+        driverId: session.user.id,
+        completionId: String(serverCertificate.completionId ?? ""),
+        issuedAt: String(serverCertificate.issuedAt ?? new Date().toISOString()),
+        expiresAt: serverCertificate.expiresAt
+          ? String(serverCertificate.expiresAt)
+          : null,
+        verificationCode: String(serverCertificate.verificationCode ?? ""),
+        verificationUrl: String(serverCertificate.verificationUrl ?? "")
+      };
+    }
+
+    if (!cert) {
+      throw new Error("Certificate record not found. Please try again.");
+    }
+
+    const pdfBase64 = await buildCertificatePdf(
+      bundle.driver.fullName || "Driver",
+      cert.completionId,
+      cert.issuedAt,
+      cert.verificationUrl,
+      bundle.driver.licenceClass,
+      bundle.driver.issuingState,
+      bundle.driver.depotLocation
+    );
 
     return {
-      pdfBase64: buildCertificatePdf(
-        bundle.driver.fullName || "Driver",
-        certificateRecord.completionId,
-        certificateRecord.issuedAt,
-        certificateRecord.verificationUrl,
-        bundle.driver.licenceClass,
-        bundle.driver.issuingState,
-        bundle.driver.depotLocation
-      ),
-      state: {
-        ...bundle,
-        certificate: certificateRecord
-      }
+      pdfBase64,
+      state: { ...bundle, certificate: cert }
     };
   },
 
@@ -875,7 +718,8 @@ export const api = {
         auditTrail,
         lastActivityAt: auditTrail[0]?.createdAt ?? progressRow?.updated_at ?? profile.updated_at,
         feedback,
-        completionHours
+        completionHours,
+        archivedAt: profile.archived_at ?? null
       };
     });
 
@@ -903,7 +747,11 @@ export const api = {
         inProgressDrivers: realRows.filter((row: any) => row.status === "In Progress").length,
         completionRate: realRows.length ? Math.round((completedDrivers / realRows.length) * 100) : 0,
         averageQuizScore: quizScores.length ? Math.round(quizScores.reduce((sum: number, score: number) => sum + score, 0) / quizScores.length) : 0,
-        averageCompletionHours: completionHours.length ? Math.round(completionHours.reduce((sum: number, value: number) => sum + value, 0) / completionHours.length) : 0
+        averageCompletionHours: completionHours.length ? Math.round(completionHours.reduce((sum: number, value: number) => sum + value, 0) / completionHours.length) : 0,
+        certificateRate: realRows.length ? Math.round((realRows.filter((row: any) => row.certificateId).length / realRows.length) * 100) : 0,
+        certificateCount: realRows.filter((row: any) => row.certificateId).length,
+        licenceRate: realRows.length ? Math.round((realRows.filter((row: any) => row.documents?.some((doc: any) => doc.type === "driver_license")).length / realRows.length) * 100) : 0,
+        licenceCount: realRows.filter((row: any) => row.documents?.some((doc: any) => doc.type === "driver_license")).length
       },
       charts: {
         completionTrend: buildCompletionTrend(certificates),
@@ -922,47 +770,27 @@ export const api = {
 
 
   async registerDriver(input: DriverSelfRegisterInput) {
-    const redirectUrl = typeof window !== "undefined" ? window.location.origin : "https://driver-induction-platform.vercel.app";
-    try {
-      const response = await fetch(`${apiBaseUrl}/auth/register-driver`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input)
-      });
-      if (response.ok) {
-        const body = await response.json();
-        return body as { message: string; email: string };
-      }
-    } catch {
-      // Fallback to client Supabase signUp for Vercel edge deployment
-    }
-
-    const { createClient } = await import("@supabase/supabase-js");
-    const tempAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
+    const response = await fetch(`${apiBaseUrl}/auth/register-driver`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
     });
-
-    const { data: authData, error: authErr } = await tempAuthClient.auth.signUp({
-      email: input.email.trim(),
-      password: input.password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          role: "driver",
-          full_name: input.fullName.trim(),
-          licenceClass: input.licenceClass || "HC",
-          issuingState: input.issuingState || "VIC",
-          licenceNumber: input.licenceNumber || "",
-          depotLocation: input.depotCode || "Melbourne Hub"
-        }
-      }
-    });
-
-    if (authErr && !authData?.user) {
-      throw new Error(authErr.message || "Registration failed.");
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.message ?? "Self-registration failed.");
     }
+    return body as { message: string; email: string };
+  },
 
-    return { message: "Driver registered successfully. Confirmation email sent.", email: input.email };
+  async requestPasswordHelp(email: string) {
+    const response = await fetch(`${apiBaseUrl}/auth/password-reset-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    const body = await response.json().catch(() => ({ message: "Unable to submit the request right now." }));
+    if (!response.ok) throw new Error(body.message || "Unable to submit the request right now.");
+    return body as { message: string };
   },
 
   async createDriver(session: SessionState, input: {
@@ -977,13 +805,12 @@ export const api = {
     licenceNumber?: string;
     depotLocation?: string;
   }) {
-    const redirectUrl = typeof window !== "undefined" ? window.location.origin : "https://driver-induction-platform.vercel.app";
     try {
-      await adminRequest("/admin/drivers", session, {
+      const result = await adminRequest<{ emailSent?: boolean; message?: string }>("/admin/drivers", session, {
         method: "POST",
         body: JSON.stringify(input)
       });
-      return;
+      return { emailSent: Boolean(result?.emailSent), message: result?.message };
     } catch {
       // 1. Try RPC if available
       try {
@@ -1001,7 +828,7 @@ export const api = {
               localStorage.setItem(`bnt-driver-meta-${rpcRes}`, JSON.stringify(input));
             }
           } catch {}
-          return;
+          return { emailSent: false, message: "Driver created, but the welcome email could not be sent because the API email service was unavailable." };
         }
       } catch {}
 
@@ -1018,7 +845,6 @@ export const api = {
         email: cleanEmail,
         password: input.password,
         options: {
-          emailRedirectTo: redirectUrl,
           data: {
             role: "driver",
             full_name: cleanName,
@@ -1029,17 +855,6 @@ export const api = {
           }
         }
       });
-
-      // Dispatch confirmation email via Supabase resend if needed
-      try {
-        await tempAuthClient.auth.resend({
-          type: "signup",
-          email: cleanEmail,
-          options: {
-            emailRedirectTo: redirectUrl
-          }
-        });
-      } catch {}
 
       let userId = authData.user?.id;
 
@@ -1101,6 +916,7 @@ export const api = {
         completed_step_ids: [],
         updated_at: new Date().toISOString()
       }, { onConflict: "user_id" });
+      return { emailSent: false, message: "Driver created, but the welcome email was not sent. Configure an email provider on the API server." };
     }
   },
 
@@ -1159,15 +975,27 @@ export const api = {
   },
 
   async resetDriverPassword(session: SessionState, driverId: string, password: string) {
-    try {
-      await adminRequest(`/admin/drivers/${driverId}/reset-password`, session, {
-        method: "POST",
-        body: JSON.stringify({ password })
-      });
-      return;
-    } catch {
-      // Direct Supabase fallback
-    }
+    return await adminRequest<{ emailSent: boolean; message: string }>(`/admin/drivers/${driverId}/reset-password`, session, {
+      method: "POST",
+      body: JSON.stringify({ password })
+    });
+  },
+
+  async getPasswordHelpRequests(session: SessionState) {
+    return await adminRequest<Array<{
+      id: string;
+      email: string;
+      status: "pending" | "handled";
+      created_at: string;
+      handled_at: string | null;
+      driver: { full_name: string | null; phone: string | null } | null;
+    }>>("/admin/password-reset-requests", session, { method: "GET" });
+  },
+
+  async markPasswordHelpRequestHandled(session: SessionState, requestId: string) {
+    return await adminRequest<{ message: string }>(`/admin/password-reset-requests/${requestId}/handled`, session, {
+      method: "POST"
+    });
   },
 
   async resetDriverInduction(session: SessionState, driverId: string) {
@@ -1180,33 +1008,19 @@ export const api = {
       // Direct Supabase fallback
     }
 
-    try {
-      await supabase.from("documents").delete().eq("user_id", driverId);
-      await supabase.from("quiz_attempts").delete().eq("user_id", driverId);
-      await supabase.from("certificates").delete().eq("user_id", driverId);
-      await supabase.from("driver_feedback").delete().eq("user_id", driverId);
-      await supabase.from("learning_section_completions").delete().eq("user_id", driverId);
-      await supabase.from("induction_progress").delete().eq("user_id", driverId);
-      await supabase.from("induction_progress").insert({
-        user_id: driverId,
-        current_step: 1,
-        completion_percentage: 0,
-        completed_step_ids: [],
-        completed: false,
-        quiz_score: null,
-        declaration_accepted: false,
-        signature: null,
-        declaration_agreed_at: null,
-        completed_at: null,
-        updated_at: new Date().toISOString()
-      });
-      await supabase.from("drivers").update({ status: "Not Started" }).eq("user_id", driverId);
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(`bnt-progress-${driverId}`);
-      }
-    } catch (err) {
-      console.warn("resetDriverInduction direct fallback warning:", err);
-    }
+    await supabase.from("induction_progress").update({
+      current_step: 1,
+      completion_percentage: 0,
+      completed_step_ids: [],
+      completed: false,
+      quiz_score: null,
+      declaration_accepted: false,
+      signature: null,
+      declaration_agreed_at: null, // M-8 FIX: clear stale legal consent timestamp
+      completed_at: null,
+      updated_at: new Date().toISOString()
+    }).eq("user_id", driverId);
+    await supabase.from("drivers").update({ status: "Not Started" }).eq("user_id", driverId);
   },
 
   async deleteDriver(session: SessionState, driverId: string) {
@@ -1515,38 +1329,89 @@ export const api = {
     return await logDocumentView(userId, adminId, documentType);
   },
 
-  getVehicles(userId: string): VehicleRecord[] {
-    try {
-      const raw = window.localStorage.getItem(`bnt_vehicles_${userId}`);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+  async getDriverAudits(userId: string) {
+    return await getDriverAudits(userId);
   },
 
-  saveVehicle(userId: string, vehicle: VehicleRecord): VehicleRecord[] {
-    const current = this.getVehicles(userId);
-    const existingIndex = current.findIndex((v) => v.id === vehicle.id);
-    let next: VehicleRecord[];
-    if (existingIndex >= 0) {
-      next = [...current];
-      next[existingIndex] = vehicle;
-    } else {
-      next = [vehicle, ...current];
-    }
-    try {
-      window.localStorage.setItem(`bnt_vehicles_${userId}`, JSON.stringify(next));
-    } catch {}
-    return next;
+  async completeAuditAssignment(assignmentId: string, answers: Record<number, boolean>) {
+    return await completeAuditAssignment(assignmentId, answers);
   },
 
-  deleteVehicle(userId: string, vehicleId: string): VehicleRecord[] {
-    const current = this.getVehicles(userId);
-    const next = current.filter((v) => v.id !== vehicleId);
-    try {
-      window.localStorage.setItem(`bnt_vehicles_${userId}`, JSON.stringify(next));
-    } catch {}
-    return next;
+  async createAudit(input: {
+    name: string;
+    category: string;
+    description: string;
+    questions: string[];
+    dueDate?: string | null;
+  }) {
+    return await createAudit(input);
+  },
+
+  async assignAudit(auditId: string, userIds: string[]) {
+    return await assignAudit(auditId, userIds);
+  },
+
+  async getAdminAuditData() {
+    return await getAdminAuditData();
+  },
+
+  async getDriverSOPs(userId: string) {
+    return await getDriverSOPs(userId);
+  },
+
+  async completeSOP(userId: string, sopId: string) {
+    return await completeSOP(userId, sopId);
+  },
+
+  async createSOP(input: {
+    code: string;
+    name: string;
+    category: string;
+    isMandatory: boolean;
+    contentSummary: string;
+    dueDate?: string | null;
+    videoUrl?: string | null;
+    quizQuestionsCount?: number;
+  }) {
+    return await createSOP(input);
+  },
+
+  async deleteSOP(sopId: string) {
+    return await deleteSOP(sopId);
+  },
+
+  async getAdminSOPData() {
+    return await getAdminSOPData();
+  },
+
+  async getVehicles(userId: string): Promise<VehicleRecord[]> {
+    return await getDriverVehicles(userId);
+  },
+
+  async saveVehicle(userId: string, vehicle: VehicleRecord): Promise<VehicleRecord[]> {
+    return await saveDriverVehicle(userId, vehicle);
+  },
+
+  async deleteVehicle(userId: string, vehicleId: string): Promise<VehicleRecord[]> {
+    const { error } = await supabase
+      .from("driver_vehicles")
+      .delete()
+      .eq("id", vehicleId)
+      .eq("user_id", userId);
+    if (error) throw error;
+    return await getDriverVehicles(userId);
+  },
+
+  async getAdminFleetData() {
+    return await getAdminFleetData();
+  },
+
+  async verifyVehiclePass(passCode: string) {
+    return await verifyVehiclePass(passCode);
+  },
+
+  async verifyDriver(driverId: string) {
+    return await verifyDriver(driverId);
   },
 
   getSiteCheckins(userId: string): SiteCheckinRecord[] {
@@ -1578,56 +1443,297 @@ export const api = {
     return next;
   },
 
-  getPreTripInspections(userId: string): PreTripInspectionRecord[] {
-    try {
-      const raw = window.localStorage.getItem(`bnt_pretrip_${userId}`);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+  async getPreTripInspections(userId: string): Promise<PreTripInspectionRecord[]> {
+    const { data, error } = await supabase
+      .from('pre_trip_inspections')
+      .select('*')
+      .eq('user_id', userId)
+      .order('inspected_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      driverId: row.user_id,
+      driverName: row.driver_signature,
+      vehicleRego: row.vehicle_rego,
+      odometer: row.odometer,
+      trailerId: row.trailer_id,
+      overallStatus: row.overall_status,
+      items: row.items,
+      driverSignature: row.driver_signature,
+      inspectedAt: row.inspected_at,
+    }));
   },
 
-  savePreTripInspection(userId: string, record: PreTripInspectionRecord): PreTripInspectionRecord[] {
-    const current = this.getPreTripInspections(userId);
-    const next = [record, ...current];
-    try {
-      window.localStorage.setItem(`bnt_pretrip_${userId}`, JSON.stringify(next));
-    } catch {}
-    return next;
+  async savePreTripInspection(userId: string, record: PreTripInspectionRecord): Promise<PreTripInspectionRecord> {
+    const { data, error } = await supabase
+      .from('pre_trip_inspections')
+      .insert({
+        user_id: userId,
+        vehicle_rego: record.vehicleRego,
+        odometer: record.odometer,
+        trailer_id: record.trailerId,
+        overall_status: record.overallStatus,
+        items: record.items,
+        driver_signature: record.driverSignature,
+        inspected_at: record.inspectedAt,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      driverId: data.user_id,
+      driverName: data.driver_signature,
+      vehicleRego: data.vehicle_rego,
+      odometer: data.odometer,
+      trailerId: data.trailer_id,
+      overallStatus: data.overall_status,
+      items: data.items,
+      driverSignature: data.driver_signature,
+      inspectedAt: data.inspected_at,
+    };
   },
 
-  getSafetyIncidents(userId: string): SafetyIncidentRecord[] {
-    try {
-      const raw = window.localStorage.getItem(`bnt_incidents_${userId}`);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
+  async getSafetyIncidents(userId: string): Promise<SafetyIncidentRecord[]> {
+    const { data, error } = await supabase
+      .from('safety_incidents')
+      .select('*')
+      .eq('user_id', userId)
+      .order('reported_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      category: row.category,
+      severity: row.severity,
+      location: row.location,
+      description: row.description,
+      immediateActionsTaken: row.immediate_actions_taken,
+      reportedBy: row.reported_by,
+      reportedAt: row.reported_at,
+      photoFileName: row.photo_file_name,
+      status: row.status,
+      riskScore: row.risk_score,
+    }));
   },
 
-  reportSafetyIncident(userId: string, incident: SafetyIncidentRecord): SafetyIncidentRecord[] {
-    const current = this.getSafetyIncidents(userId);
-    const next = [incident, ...current];
-    try {
-      window.localStorage.setItem(`bnt_incidents_${userId}`, JSON.stringify(next));
-    } catch {}
-    return next;
+  async reportSafetyIncident(userId: string, incident: Omit<SafetyIncidentRecord, 'id' | 'reportedAt'>): Promise<SafetyIncidentRecord> {
+    const { data, error } = await supabase
+      .from('safety_incidents')
+      .insert({
+        user_id: userId,
+        title: incident.title,
+        category: incident.category,
+        severity: incident.severity,
+        location: incident.location,
+        description: incident.description,
+        immediate_actions_taken: incident.immediateActionsTaken,
+        photo_file_name: incident.photoFileName,
+        status: incident.status,
+        risk_score: incident.riskScore,
+        reported_by: incident.reportedBy,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return {
+      id: data.id,
+      title: data.title,
+      category: data.category,
+      severity: data.severity,
+      location: data.location,
+      description: data.description,
+      immediateActionsTaken: data.immediate_actions_taken,
+      reportedBy: data.reported_by,
+      reportedAt: data.reported_at,
+      photoFileName: data.photo_file_name,
+      status: data.status,
+      riskScore: data.risk_score,
+    };
   },
 
-  getContractorCompany(userId: string): ContractorCompanyRecord | null {
-    try {
-      const raw = window.localStorage.getItem(`bnt_contractor_${userId}`);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
+  async getContractorCompany(userId: string): Promise<ContractorCompanyRecord | null> {
+    const { data, error } = await supabase
+      .from("contractor_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return mapContractorRow(data);
   },
 
-  saveContractorCompany(userId: string, company: ContractorCompanyRecord): ContractorCompanyRecord {
-    try {
-      window.localStorage.setItem(`bnt_contractor_${userId}`, JSON.stringify(company));
-    } catch {}
-    return company;
+  async saveContractorCompany(userId: string, company: ContractorCompanyRecord): Promise<ContractorCompanyRecord> {
+    const { data, error } = await supabase
+      .from("contractor_profiles")
+      .upsert(
+        {
+          user_id: userId,
+          company_name: company.companyName,
+          trading_name: company.tradingName,
+          abn: company.abn,
+          contact_person: company.contactPerson,
+          email: company.email,
+          phone: company.phone,
+          address: company.address,
+          nhvas_accreditation: company.nhvasAccreditation,
+          nhvas_number: company.nhvasNumber,
+          public_liability_policy: company.publicLiabilityPolicy,
+          public_liability_expiry: company.publicLiabilityExpiry || null,
+          public_liability_file_url: company.publicLiabilityFileUrl ?? null,
+          workers_comp_policy: company.workersCompPolicy,
+          workers_comp_expiry: company.workersCompExpiry || null,
+          workers_comp_file_url: company.workersCompFileUrl ?? null,
+          primary_depot: company.primaryDepot,
+          status: company.status,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "user_id" }
+      )
+      .select()
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapContractorRow(data) : company;
+  },
+
+  async uploadContractorDocument(userId: string, kind: "publicLiability" | "workersComp", file: File): Promise<string> {
+    const fileExt = file.name.split(".").pop() || "pdf";
+    const filePath = `${userId}/${kind}_${Date.now()}.${fileExt}`;
+    const { data, error } = await supabase.storage
+      .from("contractor-documents")
+      .upload(filePath, file, { cacheControl: "3600", upsert: false });
+    if (error) throw error;
+    const { data: urlData } = supabase.storage
+      .from("contractor-documents")
+      .getPublicUrl(data.path);
+    return urlData.publicUrl;
+  },
+
+  async getAdminContractorData(): Promise<{
+    contractors: Array<ContractorCompanyRecord & { userName: string; userEmail: string }>;
+  }> {
+    const { data, error } = await supabase
+      .from("contractor_profiles")
+      .select("*, profiles:user_id (full_name, email)")
+      .order("updated_at", { ascending: false })
+      .limit(1000);
+    if (error) throw error;
+    return {
+      contractors: (data ?? []).map((row: Record<string, any>) => ({
+        ...mapContractorRow(row),
+        userName: String(row.profiles?.full_name || "Driver"),
+        userEmail: String(row.profiles?.email || "")
+      }))
+    };
+  },
+
+  // Upload inspection photos to Supabase Storage
+  async uploadInspectionPhotos(userId: string, inspectionId: string, itemId: string, files: File[]): Promise<string[]> {
+    const uploadPromises = files.map((file, index) => {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `${inspectionId}_${itemId}_${index}_${Date.now()}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+      
+      return supabase.storage
+        .from('inspection-photos')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          // Get public URL
+          const { data: urlData } = supabase.storage
+            .from('inspection-photos')
+            .getPublicUrl(data.path);
+          return urlData.publicUrl;
+        });
+    });
+    
+    return Promise.all(uploadPromises);
+  },
+
+  async revokeDriverInduction(session: SessionState, driverId: string, reason: string, certificateId?: string) {
+    await adminRequest(`/admin/drivers/${driverId}/revoke-induction`, session, {
+      method: "POST", body: JSON.stringify({ reason, certificateId })
+    });
+  },
+
+  async archiveDriver(_session: SessionState, driverId: string) {
+    const { error } = await supabase.from("profiles").update({ archived_at: new Date().toISOString() }).eq("id", driverId);
+    if (error) throw error;
+  },
+  async restoreDriver(_session: SessionState, driverId: string) {
+    const { error } = await supabase.from("profiles").update({ archived_at: null }).eq("id", driverId);
+    if (error) throw error;
+  },
+  async bulkArchiveDrivers(session: SessionState, driverIds: string[]) {
+    const { error } = await supabase.from("profiles").update({ archived_at: new Date().toISOString() }).in("id", driverIds);
+    if (error) throw error;
+  },
+  async bulkRestoreDrivers(_session: SessionState, driverIds: string[]) {
+    const { error } = await supabase.from("profiles").update({ archived_at: null }).in("id", driverIds);
+    if (error) throw error;
+  },
+
+  async getBranding(): Promise<BrandingSettings> {
+    const response = await fetch(`${apiBaseUrl}/branding`);
+    if (!response.ok) throw new Error("Failed to load branding");
+    const { branding } = await response.json();
+    return { ...branding, companyName: branding.companyName ?? branding.company_name ?? branding.organizationName,
+      welcomeText: branding.welcomeText ?? branding.welcome_text ?? "", logoPath: branding.logoPath ?? branding.logo_path ?? branding.logoUrl };
+  },
+  async saveBranding(session: SessionState, input: { companyName: string; logoPath: string | null; primaryColor: string; welcomeText: string }) {
+    const response = await fetch(`${apiBaseUrl}/branding`, { method: "PUT", headers: {
+      "Content-Type": "application/json", Authorization: `Bearer ${session.accessToken}`
+    }, body: JSON.stringify({ organizationName: input.companyName, logoUrl: input.logoPath, primaryColor: input.primaryColor, welcomeText: input.welcomeText }) });
+    if (!response.ok) throw new Error("Failed to save branding");
+    const { branding } = await response.json();
+    return { ...branding, companyName: input.companyName, welcomeText: input.welcomeText, logoPath: input.logoPath } as BrandingSettings;
+  },
+  async uploadBrandingLogo(_session: SessionState, file: File) {
+    const path = `branding/${crypto.randomUUID()}-${file.name}`;
+    const { data, error } = await supabase.storage.from(bucketName).upload(path, file, { upsert: true });
+    if (error) throw error;
+    return { path: data.path, logoPath: data.path, url: supabase.storage.from(bucketName).getPublicUrl(data.path).data.publicUrl };
+  },
+  async removeBrandingLogo(_session: SessionState, path: string) {
+    const { error } = await supabase.storage.from(bucketName).remove([path]);
+    if (error) throw error;
+  },
+  async getPolicies(userId: string): Promise<PolicyRecord[]> {
+    const { data, error } = await supabase.from("policies").select("*").eq("is_published", true);
+    if (error) throw error;
+    const { data: signatures } = await supabase.from("policy_signatures").select("policy_id").eq("driver_id", userId);
+    const signedIds = new Set((signatures ?? []).map((row: any) => row.policy_id));
+    return (data ?? []).map((row: any) => ({ ...row, versionId: row.version_id ?? row.id, name: row.name ?? row.title,
+      versionLabel: row.version_label ?? row.version, signed: signedIds.has(row.id) })) as PolicyRecord[];
+  },
+  async signPolicy(versionId: string, signature: string) {
+    const { data: user } = await supabase.auth.getUser();
+    if (!user.user) throw new Error("You are not logged in.");
+    const { error } = await supabase.from("policy_signatures").insert({ policy_id: versionId, driver_id: user.user.id, signature_text: signature, signed_at: new Date().toISOString() });
+    if (error) throw error;
+  },
+  async getPolicyList(): Promise<PolicyListItem[]> {
+    const { data, error } = await supabase.from("policies").select("*");
+    if (error) throw error;
+    return (data ?? []).map((row: any) => ({ ...row, policyId: row.id, name: row.name ?? row.title,
+      versionLabel: row.version_label ?? row.version, signatureCount: row.signature_count ?? 0,
+      signedCount: row.signature_count ?? 0, totalDrivers: row.total_drivers ?? 0 })) as PolicyListItem[];
+  },
+  async createPolicy(input: { name: string; versionLabel: string; content: string }) {
+    const { error } = await supabase.from("policies").insert({ title: input.name, name: input.name, version: input.versionLabel, version_label: input.versionLabel, content: input.content, status: "draft" });
+    if (error) throw error;
+  },
+  async publishPolicyVersion(session: SessionState, policyId: string, versionLabel: string, content: string) {
+    const { error } = await supabase.from("policies").update({ version: versionLabel, version_label: versionLabel, content, status: "published", is_published: true, published_at: new Date().toISOString() }).eq("id", policyId);
+    if (error) throw error;
+  },
+  async getPolicySignatureReport(policyId: string): Promise<{ signed: PolicySignatureSummary[]; pending: PolicyPendingDriver[]; versionLabel: string }> {
+    const { data, error } = await supabase.from("policy_signatures").select("*").eq("policy_id", policyId);
+    if (error) throw error;
+    return { signed: (data ?? []) as PolicySignatureSummary[], pending: [], versionLabel: "" };
   }
 };
 
@@ -1818,16 +1924,20 @@ async function logDocumentView(userId: string, adminId: string, documentType: st
 async function getLearningSections() {
   const { data, error } = await supabase
     .from("learning_sections")
-    .select("id, title, format, summary, sort_order, video_url")
+    .select("id, title, format, summary, sort_order, video_url, video_duration_seconds, require_full_watch, media_json, source_slide_id")
     .order("sort_order", { ascending: true });
   if (error) throw error;
-  const uniqueByTitle = new Map<string, Record<string, unknown>>();
+  const uniqueSections = new Map<string, Record<string, unknown>>();
   for (const row of data ?? []) {
     const title = String(row.title ?? "");
-    if (!title || uniqueByTitle.has(title)) continue;
-    uniqueByTitle.set(title, row);
+    if (!title) continue;
+    // Legacy curriculum rows can contain duplicate titles, but course slides
+    // are distinct modules and must never be collapsed by their display title.
+    const key = row.source_slide_id ? `slide:${row.id}` : `title:${title}`;
+    if (uniqueSections.has(key)) continue;
+    uniqueSections.set(key, row);
   }
-  return Array.from(uniqueByTitle.values());
+  return Array.from(uniqueSections.values());
 }
 
 async function getLearningCompletions(userId: string, sections: Array<Record<string, unknown>>) {
@@ -1847,7 +1957,12 @@ async function getLearningCompletions(userId: string, sections: Array<Record<str
 
   return sections.map((section, idx) => {
     const completion = completionMap.get(section.id);
-    const videoUrl = localModuleVideos[idx % localModuleVideos.length];
+    const isCourseSlide = Boolean(section.source_slide_id);
+    const videoUrl = section.video_url
+      ? String(section.video_url)
+      : isCourseSlide
+        ? undefined
+        : localModuleVideos[idx % localModuleVideos.length];
 
     return {
       sectionId: String(section.id),
@@ -1855,6 +1970,11 @@ async function getLearningCompletions(userId: string, sections: Array<Record<str
       format: String(section.format),
       summary: String(section.summary),
       videoUrl,
+      mediaJson: section.media_json && typeof section.media_json === "object"
+        ? section.media_json as Record<string, unknown>
+        : undefined,
+      videoDurationSeconds: Number(section.video_duration_seconds ?? 0) || undefined,
+      requireFullWatch: Boolean(section.require_full_watch),
       completed: Boolean(completion?.completed),
       completedAt: completion?.completed_at ?? null
     };
@@ -1899,6 +2019,428 @@ async function getDriverFeedback(userId: string): Promise<DriverFeedback | null>
   const { data, error } = await supabase.from("driver_feedback").select("*").eq("user_id", userId).maybeSingle();
   if (error) throw error;
   return data ? mapFeedbackRow(data) : null;
+}
+
+function mapAuditRecordRow(row: Record<string, unknown>): ComplianceAuditRecord {
+  const questions = Array.isArray(row.questions)
+    ? row.questions.map((item) => String(item))
+    : [];
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    category: String(row.category ?? "Transport"),
+    description: String(row.description ?? ""),
+    questions,
+    dueDate: row.due_date ? String(row.due_date) : null,
+    isActive: Boolean(row.is_active ?? true),
+    createdAt: String(row.created_at)
+  };
+}
+
+function mapAssignmentRow(row: Record<string, unknown>, audit: ComplianceAuditRecord): AuditAssignment {
+  return {
+    id: String(row.id),
+    auditId: String(row.audit_id),
+    audit,
+    status: (row.status ?? "No Attempt") as AuditAssignmentStatus,
+    dueDate: row.due_date ? String(row.due_date) : audit.dueDate,
+    attemptsCount: Number(row.attempts_count ?? 0),
+    lastAttemptDate: row.last_attempt_date ? String(row.last_attempt_date) : null,
+    completedAt: row.completed_at ? String(row.completed_at) : null
+  };
+}
+
+async function getDriverAudits(userId: string): Promise<AuditAssignment[]> {
+  const { data: assignmentRows, error: assignmentError } = await supabase
+    .from("audit_assignments")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (assignmentError) throw assignmentError;
+  if (!assignmentRows?.length) return [];
+
+  const auditIds = Array.from(
+    new Set(assignmentRows.map((row: Record<string, unknown>) => String(row.audit_id)))
+  );
+  const { data: auditRows, error: auditError } = await supabase
+    .from("compliance_audits")
+    .select("*")
+    .in("id", auditIds);
+  if (auditError) throw auditError;
+
+  const auditMap = new Map(
+    (auditRows ?? []).map((audit: Record<string, unknown>) => [String(audit.id), mapAuditRecordRow(audit)])
+  );
+
+  return assignmentRows
+    .map((row: Record<string, unknown>) => {
+      const audit = auditMap.get(String(row.audit_id));
+      if (!audit) return null;
+      return mapAssignmentRow(row, audit);
+    })
+    .filter((item: AuditAssignment | null): item is AuditAssignment => item !== null);
+}
+
+async function completeAuditAssignment(assignmentId: string, answers: Record<number, boolean>): Promise<void> {
+  const { data: current, error: currentError } = await supabase
+    .from("audit_assignments")
+    .select("attempts_count")
+    .eq("id", assignmentId)
+    .maybeSingle();
+  if (currentError) throw currentError;
+
+  const answered = Object.entries(answers);
+  const passed = answered.length > 0 && answered.every(([, value]) => Boolean(value));
+  const now = new Date().toISOString();
+
+  if (answered.length > 0) {
+    const responseRows = answered.map(([index, answer]) => ({
+      assignment_id: assignmentId,
+      question_index: Number(index),
+      answer: Boolean(answer)
+    }));
+    const { error: responseError } = await supabase.from("audit_responses").insert(responseRows);
+    if (responseError) throw responseError;
+  }
+
+  const { error: updateError } = await supabase
+    .from("audit_assignments")
+    .update({
+      status: passed ? "Passed" : "Action Required",
+      attempts_count: Number(current?.attempts_count ?? 0) + 1,
+      last_attempt_date: now,
+      completed_at: passed ? now : null
+    })
+    .eq("id", assignmentId);
+  if (updateError) throw updateError;
+}
+
+async function createAudit(input: {
+  name: string;
+  category: string;
+  description: string;
+  questions: string[];
+  dueDate?: string | null;
+}): Promise<string> {
+  const { data, error } = await supabase
+    .from("compliance_audits")
+    .insert({
+      name: input.name,
+      category: input.category,
+      description: input.description,
+      questions: input.questions,
+      due_date: input.dueDate || null
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return String(data?.id);
+}
+
+async function assignAudit(auditId: string, userIds: string[]): Promise<void> {
+  if (!userIds.length) return;
+  const rows = userIds.map((userId) => ({ audit_id: auditId, user_id: userId }));
+  const { error } = await supabase
+    .from("audit_assignments")
+    .upsert(rows, { onConflict: "audit_id,user_id" });
+  if (error) throw error;
+}
+
+async function getAdminAuditData(): Promise<{
+  audits: ComplianceAuditRecord[];
+  assignments: AdminAuditAssignmentRow[];
+}> {
+  const [auditResult, assignmentResult, profileResult] = await Promise.all([
+    supabase.from("compliance_audits").select("*").order("created_at", { ascending: false }).limit(200),
+    supabase.from("audit_assignments").select("*").order("created_at", { ascending: false }).limit(1000),
+    supabase.from("profiles").select("id, full_name, email")
+  ]);
+
+  if (auditResult.error) throw auditResult.error;
+  if (assignmentResult.error) throw assignmentResult.error;
+  if (profileResult.error) throw profileResult.error;
+
+  const profileMap = new Map(
+    (profileResult.data ?? []).map((profile: Record<string, unknown>) => [String(profile.id), profile])
+  );
+  const auditMap = new Map(
+    (auditResult.data ?? []).map((audit: Record<string, unknown>) => [String(audit.id), mapAuditRecordRow(audit)])
+  );
+
+  const assignments: AdminAuditAssignmentRow[] = (assignmentResult.data ?? [])
+    .map((row: Record<string, unknown>) => {
+      const audit = auditMap.get(String(row.audit_id));
+      const profile = profileMap.get(String(row.user_id));
+      if (!audit || !profile) return null;
+      return {
+        ...mapAssignmentRow(row, audit),
+        driverName: String(profile.full_name || profile.email || "Driver"),
+        driverEmail: String(profile.email || "")
+      };
+    })
+    .filter((item: AdminAuditAssignmentRow | null): item is AdminAuditAssignmentRow => item !== null);
+
+  return { audits: Array.from(auditMap.values()), assignments };
+}
+
+// --- SOP Learning Modules ---
+
+async function getDriverSOPs(userId: string): Promise<SOPItem[]> {
+  const [moduleResult, completionResult] = await Promise.all([
+    supabase
+      .from("sop_modules")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(200),
+    supabase.from("sop_completions").select("sop_id").eq("user_id", userId)
+  ]);
+  if (moduleResult.error) throw moduleResult.error;
+  if (completionResult.error) throw completionResult.error;
+
+  const completedIds = new Set(
+    (completionResult.data ?? []).map((row: Record<string, unknown>) => String(row.sop_id))
+  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return (moduleResult.data ?? []).map((row: Record<string, unknown>) => {
+    const dueDate = row.due_date ? String(row.due_date) : null;
+    const passed = completedIds.has(String(row.id));
+    const expired =
+      !passed &&
+      dueDate !== null &&
+      new Date(`${dueDate}T00:00:00`).getTime() < today.getTime();
+    return {
+      id: String(row.id),
+      code: String(row.code ?? ""),
+      name: String(row.name ?? ""),
+      category: String(row.category ?? "SOP") as SOPItem["category"],
+      isMandatory: Boolean(row.is_mandatory),
+      dueDate,
+      status: passed ? "Passed" : expired ? "Expired" : "No Attempt",
+      contentSummary: String(row.content_summary ?? ""),
+      videoUrl: row.video_url ? String(row.video_url) : undefined,
+      quizQuestionsCount: row.quiz_questions_count ? Number(row.quiz_questions_count) : undefined
+    };
+  });
+}
+
+async function completeSOP(userId: string, sopId: string): Promise<void> {
+  const { error } = await supabase.from("sop_completions").upsert(
+    { sop_id: sopId, user_id: userId, completed_at: new Date().toISOString() },
+    { onConflict: "sop_id,user_id" }
+  );
+  if (error) throw error;
+}
+
+async function createSOP(input: {
+  code: string;
+  name: string;
+  category: string;
+  isMandatory: boolean;
+  contentSummary: string;
+  dueDate?: string | null;
+  videoUrl?: string | null;
+  quizQuestionsCount?: number;
+}): Promise<string> {
+  const { data, error } = await supabase
+    .from("sop_modules")
+    .insert({
+      code: input.code,
+      name: input.name,
+      category: input.category,
+      is_mandatory: input.isMandatory,
+      content_summary: input.contentSummary,
+      due_date: input.dueDate || null,
+      video_url: input.videoUrl || null,
+      quiz_questions_count: input.quizQuestionsCount ?? 0
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return String(data?.id);
+}
+
+async function deleteSOP(sopId: string): Promise<void> {
+  const { error } = await supabase.from("sop_modules").delete().eq("id", sopId);
+  if (error) throw error;
+}
+
+async function getAdminSOPData(): Promise<{
+  sops: SOPItem[];
+  completions: { sopId: string; userId: string; userName: string; completedAt: string }[];
+}> {
+  const [moduleResult, completionResult, profileResult] = await Promise.all([
+    supabase.from("sop_modules").select("*").order("created_at", { ascending: false }).limit(200),
+    supabase
+      .from("sop_completions")
+      .select("sop_id, user_id, completed_at")
+      .order("completed_at", { ascending: false })
+      .limit(2000),
+    supabase.from("profiles").select("id, full_name, email")
+  ]);
+
+  if (moduleResult.error) throw moduleResult.error;
+  if (completionResult.error) throw completionResult.error;
+  if (profileResult.error) throw profileResult.error;
+
+  const profileMap = new Map(
+    (profileResult.data ?? []).map((profile: Record<string, unknown>) => [String(profile.id), profile])
+  );
+
+  const sops: SOPItem[] = (moduleResult.data ?? []).map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    code: String(row.code ?? ""),
+    name: String(row.name ?? ""),
+    category: String(row.category ?? "SOP") as SOPItem["category"],
+    isMandatory: Boolean(row.is_mandatory),
+    dueDate: row.due_date ? String(row.due_date) : null,
+    status: "No Attempt",
+    contentSummary: String(row.content_summary ?? ""),
+    videoUrl: row.video_url ? String(row.video_url) : undefined,
+    quizQuestionsCount: row.quiz_questions_count ? Number(row.quiz_questions_count) : undefined
+  }));
+
+  const completions = (completionResult.data ?? []).map((row: Record<string, unknown>) => {
+    const profile = profileMap.get(String(row.user_id));
+    return {
+      sopId: String(row.sop_id),
+      userId: String(row.user_id),
+      userName: String(profile?.full_name || profile?.email || "Driver"),
+      completedAt: String(row.completed_at)
+    };
+  });
+
+  return { sops, completions };
+}
+
+// --- Driver Vehicles (fleet) ---
+
+function mapContractorRow(row: Record<string, unknown>): ContractorCompanyRecord {
+  return {
+    id: String(row.user_id),
+    companyName: String(row.company_name ?? ""),
+    tradingName: String(row.trading_name ?? ""),
+    abn: String(row.abn ?? ""),
+    contactPerson: String(row.contact_person ?? ""),
+    email: String(row.email ?? ""),
+    phone: String(row.phone ?? ""),
+    address: String(row.address ?? ""),
+    nhvasAccreditation: (String(row.nhvas_accreditation ?? "None")) as ContractorCompanyRecord["nhvasAccreditation"],
+    nhvasNumber: String(row.nhvas_number ?? ""),
+    publicLiabilityPolicy: String(row.public_liability_policy ?? ""),
+    publicLiabilityExpiry: row.public_liability_expiry ? String(row.public_liability_expiry) : "",
+    workersCompPolicy: String(row.workers_comp_policy ?? ""),
+    workersCompExpiry: row.workers_comp_expiry ? String(row.workers_comp_expiry) : "",
+    primaryDepot: String(row.primary_depot ?? ""),
+    status: (String(row.status ?? "Pending Review")) as ContractorCompanyRecord["status"],
+    publicLiabilityFileUrl: row.public_liability_file_url ? String(row.public_liability_file_url) : null,
+    workersCompFileUrl: row.workers_comp_file_url ? String(row.workers_comp_file_url) : null
+  };
+}
+
+function mapVehicleRow(row: Record<string, unknown>): VehicleRecord {
+  return {
+    id: String(row.id),
+    rego: String(row.rego ?? ""),
+    makeModel: String(row.make_model ?? ""),
+    bodyType: String(row.body_type ?? ""),
+    branchName: String(row.branch_name ?? ""),
+    driverNumber: String(row.driver_number ?? ""),
+    driverName: String(row.driver_name ?? ""),
+    regoExpiryDate: String(row.rego_expiry_date ?? ""),
+    dgExpiryDate: row.dg_expiry_date ? String(row.dg_expiry_date) : null,
+    scbaServiceDueDate: row.scba_service_due_date ? String(row.scba_service_due_date) : null,
+    vehicleCheckApproved: Boolean(row.vehicle_check_approved),
+    regoCheckApproved: Boolean(row.rego_check_approved),
+    status: (String(row.status ?? "Active")) as VehicleRecord["status"],
+    qrPassCode: String(row.qr_pass_code ?? ""),
+    contactNumber: row.contact_number ? String(row.contact_number) : undefined
+  };
+}
+
+async function getDriverVehicles(userId: string): Promise<VehicleRecord[]> {
+  const { data, error } = await supabase
+    .from("driver_vehicles")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map(mapVehicleRow);
+}
+
+async function saveDriverVehicle(userId: string, vehicle: VehicleRecord): Promise<VehicleRecord[]> {
+  const { error } = await supabase.from("driver_vehicles").upsert(
+    {
+      id: vehicle.id,
+      user_id: userId,
+      rego: vehicle.rego,
+      make_model: vehicle.makeModel,
+      body_type: vehicle.bodyType,
+      branch_name: vehicle.branchName,
+      driver_number: vehicle.driverNumber,
+      driver_name: vehicle.driverName,
+      rego_expiry_date: vehicle.regoExpiryDate || null,
+      dg_expiry_date: vehicle.dgExpiryDate || null,
+      scba_service_due_date: vehicle.scbaServiceDueDate || null,
+      vehicle_check_approved: vehicle.vehicleCheckApproved,
+      rego_check_approved: vehicle.regoCheckApproved,
+      status: vehicle.status,
+      qr_pass_code: vehicle.qrPassCode,
+      contact_number: vehicle.contactNumber ?? null
+    },
+    { onConflict: "id" }
+  );
+  if (error) throw error;
+  return await getDriverVehicles(userId);
+}
+
+async function getAdminFleetData(): Promise<{
+  vehicles: Array<VehicleRecord & { userName: string; userEmail: string }>;
+}> {
+  const { data, error } = await supabase
+    .from("driver_vehicles")
+    .select("*, profiles:user_id (full_name, email)")
+    .order("updated_at", { ascending: false })
+    .limit(1000);
+  if (error) throw error;
+
+  return {
+    vehicles: (data ?? []).map((row: Record<string, any>) => ({
+      ...mapVehicleRow(row),
+      userName: String(row.profiles?.full_name || "Driver"),
+      userEmail: String(row.profiles?.email || "")
+    }))
+  };
+}
+
+async function verifyVehiclePass(passCode: string): Promise<VehiclePassVerificationResult> {
+  const baseUrl = apiBaseUrl.endsWith("/api") ? apiBaseUrl.slice(0, -4) : apiBaseUrl;
+  const res = await fetch(`${baseUrl}/api/vehicle/verify/${encodeURIComponent(passCode)}`, {
+    headers: { accept: "application/json" }
+  });
+  if (!res.ok) {
+    if (res.status === 404) {
+      return { verified: false, message: "Vehicle pass not found." };
+    }
+    throw new Error("Verification service is unavailable. Please try again.");
+  }
+  return (await res.json()) as VehiclePassVerificationResult;
+}
+
+async function verifyDriver(driverId: string): Promise<DriverVerificationResult> {
+  const baseUrl = apiBaseUrl.endsWith("/api") ? apiBaseUrl.slice(0, -4) : apiBaseUrl;
+  const res = await fetch(`${baseUrl}/api/driver/verify/${encodeURIComponent(driverId)}`, {
+    headers: { accept: "application/json" }
+  });
+  if (!res.ok) {
+    if (res.status === 404) {
+      return { verified: false, message: "Driver not found." };
+    }
+    throw new Error("Verification service is unavailable. Please try again.");
+  }
+  return (await res.json()) as DriverVerificationResult;
 }
 
 async function logAuditEvent(userId: string, action: string, metadata: Record<string, unknown>) {
@@ -2223,3 +2765,255 @@ export async function publishInductionVersion(
     throw new Error(err?.message || "Failed to publish new induction version.");
   }
 }
+
+export async function getMyScheduleInvitations(session: SessionState): Promise<InductionScheduleInvitation[]> {
+  const userId = session.user.id;
+  const { data, error } = await supabase
+    .from("induction_schedule_invitations")
+    .select(`
+      *,
+      enrollment:induction_schedule_enrollments!inner(
+        id,
+        driver_id,
+        schedule_id,
+        induction_schedules!inner(name)
+      )
+    `)
+    .eq("enrollment.driver_id", userId)
+    .order("sent_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    enrollmentId: row.enrollment_id,
+    scheduleItemId: row.schedule_item_id,
+    deliveryMethod: row.delivery_method,
+    status: row.status,
+    metadata: row.metadata ?? {},
+    sentAt: row.sent_at,
+    createdAt: row.sent_at,
+    updatedAt: row.sent_at
+  })) satisfies InductionScheduleInvitation[];
+}
+
+const mapInductionCourse = (row: any, templateRecord = false): InductionCourse => ({
+  id: row.id,
+  title: row.title ?? "",
+  description: row.description ?? "",
+  templateId: row.templateId ?? row.template_id ?? null,
+  versionLabel: row.versionLabel ?? row.version_label ?? "1.0",
+  revisionNotes: row.revisionNotes ?? row.revision_notes ?? "",
+  isTemplate: templateRecord || Boolean(row.isTemplate ?? row.is_template),
+  isCurrent: Boolean(row.isCurrent ?? row.is_current),
+  siteTag: row.siteTag ?? row.site_tag ?? "global",
+  createdBy: row.createdBy ?? row.created_by ?? null,
+  createdAt: row.createdAt ?? row.created_at ?? "",
+  updatedAt: row.updatedAt ?? row.updated_at ?? ""
+});
+
+export async function getInductionCourses(session: SessionState): Promise<InductionCourse[]> {
+  const response = await fetch(`${apiBaseUrl}/admin/cms/courses`, {
+    headers: { Authorization: `Bearer ${session.accessToken}` }
+  });
+  if (!response.ok) throw new Error("Failed to fetch courses");
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows.map((row) => mapInductionCourse(row)) : [];
+}
+
+export async function createInductionCourse(session: SessionState, input: {
+  title: string;
+  description?: string;
+  versionLabel?: string;
+  revisionNotes?: string;
+  isTemplate?: boolean;
+  siteTag?: string;
+}): Promise<InductionCourse> {
+  const response = await fetch(`${apiBaseUrl}/admin/cms/courses`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.accessToken}`
+    },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to create course");
+  }
+  return mapInductionCourse(await response.json());
+}
+
+export async function updateInductionCourse(session: SessionState, courseId: string, input: Partial<{
+  title: string;
+  description: string;
+  versionLabel: string;
+  revisionNotes: string;
+  isCurrent: boolean;
+  isTemplate: boolean;
+  siteTag: string;
+}>): Promise<InductionCourse> {
+  const response = await fetch(`${apiBaseUrl}/admin/cms/courses/${courseId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.accessToken}`
+    },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to update course");
+  }
+  return mapInductionCourse(await response.json());
+}
+
+export async function deleteInductionCourse(session: SessionState, courseId: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/admin/cms/courses/${courseId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${session.accessToken}` }
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to delete course");
+  }
+}
+
+export async function cloneCourse(session: SessionState, courseId: string, input: {
+  title: string;
+  siteTag?: string;
+}): Promise<{ course: InductionCourse; slidesCopied: number; questionsCopied: number }> {
+  const response = await fetch(`${apiBaseUrl}/admin/cms/courses/${courseId}/clone`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.accessToken}`
+    },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to clone course");
+  }
+  const result = await response.json();
+  return { ...result, course: mapInductionCourse(result.course) };
+}
+
+export async function publishCourseToDrivers(session: SessionState, courseId: string, input?: { versionLabel?: string; revisionNotes?: string }): Promise<{ published: number; updated: number; message?: string }> {
+  const response = await fetch(`${apiBaseUrl}/admin/cms/courses/${courseId}/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.accessToken}` },
+    body: JSON.stringify(input ?? {})
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to publish course");
+  }
+  return response.json();
+}
+
+export async function publishInductionCourse(session: SessionState, courseId: string, input: { siteTag?: string; versionLabel?: string; revisionNotes?: string }): Promise<void> {
+  await publishCourseToDrivers(session, courseId, input);
+}
+
+// CMS slide helpers used by the site induction editor.
+async function cmsRequest<T>(session: SessionState, path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}/admin/cms/${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.accessToken}`, ...init.headers }
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || "CMS request failed");
+  }
+  return response.status === 204 ? undefined as T : response.json();
+}
+
+const mapCmsSlide = (row: any): InductionSlide => ({
+  id: row.id, courseId: row.courseId ?? row.course_id, slideOrder: row.slideOrder ?? row.slide_order,
+  slideType: row.slideType ?? row.slide_type, title: row.title, contentJson: row.contentJson ?? row.content_json ?? {},
+  siteTag: row.siteTag ?? row.site_tag ?? "global", videoUrl: row.videoUrl ?? row.video_url ?? null,
+  audioUrl: row.audioUrl ?? row.audio_url ?? null, forcedWaitSeconds: row.forcedWaitSeconds ?? row.forced_wait_seconds ?? 0,
+  estimatedDurationSeconds: row.estimatedDurationSeconds ?? row.estimated_duration_seconds ?? 0,
+  triggerConfig: row.triggerConfig ?? row.trigger_config ?? {}, createdAt: row.createdAt ?? row.created_at,
+  updatedAt: row.updatedAt ?? row.updated_at
+});
+
+export async function getCourseSlides(session: SessionState, courseId: string): Promise<InductionSlide[]> {
+  const rows = await cmsRequest<any[]>(session, `courses/${courseId}/slides`);
+  return rows.map(mapCmsSlide);
+}
+export async function createSlide(session: SessionState, courseId: string, input: Partial<InductionSlide>): Promise<InductionSlide> {
+  return mapCmsSlide(await cmsRequest(session, `courses/${courseId}/slides`, { method: "POST", body: JSON.stringify(input) }));
+}
+export async function updateSlide(session: SessionState, courseId: string, slideId: string, input: Partial<InductionSlide>): Promise<InductionSlide> {
+  return mapCmsSlide(await cmsRequest(session, `courses/${courseId}/slides/${slideId}`, { method: "PATCH", body: JSON.stringify(input) }));
+}
+export async function deleteSlide(session: SessionState, courseId: string, slideId: string): Promise<void> {
+  await cmsRequest(session, `courses/${courseId}/slides/${slideId}`, { method: "DELETE" });
+}
+export async function reorderSlides(session: SessionState, courseId: string, orders: Array<{ id: string; slideOrder: number }>): Promise<void> {
+  await cmsRequest(session, `courses/${courseId}/slides/reorder`, { method: "POST", body: JSON.stringify({ orders: orders.map(({ id, slideOrder }) => ({ slideId: id, slideOrder })) }) });
+}
+export async function getSlideQuestions(session: SessionState, slideId: string): Promise<SlideQuestion[]> {
+  const rows = await cmsRequest<any[]>(session, `slides/${slideId}/questions`);
+  return rows.map((q) => ({ ...q, correctAnswer: q.correctAnswer ?? q.correct_answer ?? 0,
+    correctAnswers: q.correctAnswers ?? q.correct_answers, isCritical: q.isCritical ?? q.is_critical ?? false,
+    questionType: q.questionType ?? q.question_type ?? "single_choice", sortOrder: q.sortOrder ?? q.sort_order ?? 0,
+    acceptedAnswers: q.acceptedAnswers ?? q.accepted_answers ?? [] }));
+}
+export async function createSlideQuestion(session: SessionState, slideId: string, input: Partial<SlideQuestion>): Promise<SlideQuestion> {
+  return cmsRequest(session, `slides/${slideId}/questions`, { method: "POST", body: JSON.stringify(input) });
+}
+export async function updateSlideQuestion(session: SessionState, slideId: string, questionId: string, input: Partial<SlideQuestion>): Promise<SlideQuestion> {
+  return cmsRequest(session, `slides/${slideId}/questions/${questionId}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+export async function deleteSlideQuestion(session: SessionState, slideId: string, questionId: string | number): Promise<void> {
+  await cmsRequest(session, `slides/${slideId}/questions/${questionId}`, { method: "DELETE" });
+}
+export async function getCourseTemplates(session: SessionState): Promise<InductionCourse[]> {
+  const rows = await cmsRequest<any[]>(session, "templates");
+  return rows.map((row) => mapInductionCourse(row, true));
+}
+export async function markCourseAsTemplate(session: SessionState, courseId: string, isTemplate: boolean): Promise<void> {
+  await cmsRequest(session, `courses/${courseId}/mark-template`, { method: "POST", body: JSON.stringify({ isTemplate }) });
+}
+export async function uploadInductionAsset(session: SessionState, file: File, folder: string): Promise<{ url: string }> {
+  const key = `${session.user.id}/${folder}/${crypto.randomUUID()}-${file.name}`;
+  const { data, error } = await supabase.storage.from("induction-assets").upload(key, file, { upsert: false });
+  if (error) throw error;
+  const { data: publicUrl } = supabase.storage.from("induction-assets").getPublicUrl(data.path);
+  return { url: publicUrl.publicUrl };
+}
+
+async function adminJson<T>(session: SessionState, path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}/admin/${path}`, { ...init, headers: {
+    Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json", ...init.headers
+  } });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || "Admin request failed");
+  }
+  return response.status === 204 ? undefined as T : response.json();
+}
+
+export const getReportsOverview = (session: SessionState) => adminJson<ReportsOverview>(session, "reports/overview");
+export const getAttemptedInductionsReport = (session: SessionState) => adminJson<AttemptedInductionReport[]>(session, "reports/attempted-inductions");
+export const getCertificateStatusesReport = (session: SessionState) => adminJson<CertificateStatusReport[]>(session, "reports/certificate-statuses");
+export const getExpiringCertificatesReport = (session: SessionState) => adminJson<ExpiringCertificateReport[]>(session, "reports/expiring-certificates");
+export const getExpiringDocumentsReport = (session: SessionState) => adminJson<ExpiringDocumentReport[]>(session, "reports/expiring-documents");
+export const getDocumentsForApprovalReport = (session: SessionState) => adminJson<DocumentApprovalReport[]>(session, "reports/documents-for-approval");
+export const getScheduledStatusReport = (session: SessionState) => adminJson<ScheduledStatusReport[]>(session, "reports/scheduled-status");
+
+export const getInductionSchedules = (session: SessionState) => adminJson<InductionSchedule[]>(session, "schedules");
+export const createInductionSchedule = (session: SessionState, input: Partial<InductionSchedule>) => adminJson<InductionSchedule>(session, "schedules", { method: "POST", body: JSON.stringify(input) });
+export const updateInductionSchedule = (session: SessionState, id: string, input: Partial<InductionSchedule>) => adminJson<InductionSchedule>(session, `schedules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+export const deleteInductionSchedule = (session: SessionState, id: string) => adminJson<void>(session, `schedules/${id}`, { method: "DELETE" });
+export const getScheduleItems = (session: SessionState, id: string) => adminJson<InductionScheduleItem[]>(session, `schedules/${id}/items`);
+export const addScheduleItem = (session: SessionState, id: string, input: Partial<InductionScheduleItem>) => adminJson<InductionScheduleItem>(session, `schedules/${id}/items`, { method: "POST", body: JSON.stringify(input) });
+export const deleteScheduleItem = (session: SessionState, scheduleId: string, itemId: string) => adminJson<void>(session, `schedules/${scheduleId}/items/${itemId}`, { method: "DELETE" });
+export const getScheduleEnrollments = (session: SessionState, id: string) => adminJson<InductionScheduleEnrollment[]>(session, `schedules/${id}/enrollments`);
+export const enrollDriverInSchedule = (session: SessionState, id: string, driverId: string) => adminJson<InductionScheduleEnrollment>(session, `schedules/${id}/enroll`, { method: "POST", body: JSON.stringify({ driverId }) });
+export const unenrollDriverFromSchedule = (session: SessionState, scheduleId: string, enrollmentId: string) => adminJson<void>(session, `schedules/${scheduleId}/enroll/${enrollmentId}`, { method: "DELETE" });
+export const cancelScheduleInvitation = (session: SessionState, scheduleId: string, enrollmentId: string, reason?: string) => adminJson<void>(session, `schedules/${scheduleId}/enroll/${enrollmentId}/cancel-invitation`, { method: "POST", body: JSON.stringify({ reason }) });
+export const processScheduleInvitations = (session: SessionState) => adminJson<{ processed: number }>(session, "schedules/process-invitations", { method: "POST" });

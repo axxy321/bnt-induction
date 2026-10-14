@@ -1,4 +1,14 @@
 import { bntLogoHex } from "./logo-data";
+import QRCode from "qrcode";
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
 
 function escapePdfText(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -166,7 +176,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export function buildCertificatePdf(input: {
+export async function buildCertificatePdf(input: {
   fullName: string;
   completionId: string;
   issuedAt: string;
@@ -178,6 +188,27 @@ export function buildCertificatePdf(input: {
 }) {
   const licenceInfo = `LICENCE CLASS: ${input.licenceClass || "HC"} (${input.issuingState || "VIC"})  •  DEPOT HUB: ${input.depotLocation || "Melbourne Hub"}`;
   const logoJpgBytes = hexToBytes(bntLogoHex);
+
+  // Generate a scannable QR code that encodes the verification link, so a
+  // guard can scan the printed certificate with a phone camera to verify it.
+  let qrJpegBytes: Uint8Array | null = null;
+  let qrWidth = 0;
+  let qrHeight = 0;
+  try {
+    const canvas = document.createElement("canvas");
+    await QRCode.toCanvas(canvas, input.verificationUrl, {
+      width: 320,
+      margin: 2,
+      color: { dark: "#000000", light: "#ffffff" }
+    });
+    qrWidth = canvas.width;
+    qrHeight = canvas.height;
+    const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    qrJpegBytes = base64ToBytes(String(jpegDataUrl).split(",")[1] ?? "");
+  } catch {
+    // The QR is a convenience layer — the certificate is still valid without it.
+    qrJpegBytes = null;
+  }
 
   const commands = [
     drawRect(0, 0, 792, 612, [255, 255, 255]),
@@ -225,7 +256,10 @@ export function buildCertificatePdf(input: {
 
     // Center Gold Seal & Ribbons
     drawRibbons(396, 140),
-    drawSeal(396, 140, 44)
+    drawSeal(396, 140, 44),
+
+    // Scannable verification QR code (top-left corner)
+    ...(qrJpegBytes ? ["q", "88 0 0 88 70 460 cm", "/QR Do", "Q"] : [])
   ].join("\n");
 
   const encoder = new TextEncoder();
@@ -233,7 +267,7 @@ export function buildCertificatePdf(input: {
 
   const obj1 = encoder.encode("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n");
   const obj2 = encoder.encode("2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n");
-  const obj3 = encoder.encode("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> /XObject << /Logo 8 0 R >> >> >> endobj\n");
+  const obj3 = encoder.encode(`3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> /XObject << /Logo 8 0 R${qrJpegBytes ? " /QR 9 0 R" : ""} >> >> >> endobj\n`);
   const obj4 = concatUint8Arrays([
     encoder.encode(`4 0 obj << /Length ${cmdBytes.length} >> stream\n`),
     cmdBytes,
@@ -245,10 +279,22 @@ export function buildCertificatePdf(input: {
   const obj8 = concatUint8Arrays([
     encoder.encode(`8 0 obj << /Type /XObject /Subtype /Image /Width 237 /Height 92 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logoJpgBytes.length} >> stream\n`),
     logoJpgBytes,
-    encoder.encode("\nendstream endobj\n")
+    encoder.encode(`\nendstream endobj\n`)
   ]);
 
+  // Scannable verification QR code image (object 9), when generated.
+  const obj9 = qrJpegBytes
+    ? concatUint8Arrays([
+        encoder.encode(`9 0 obj << /Type /XObject /Subtype /Image /Width ${qrWidth} /Height ${qrHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${qrJpegBytes.length} >> stream\n`),
+        qrJpegBytes,
+        encoder.encode(`\nendstream endobj\n`)
+      ])
+    : null;
+
   const objects = [obj1, obj2, obj3, obj4, obj5, obj6, obj7, obj8];
+  if (obj9) {
+    objects.push(obj9);
+  }
 
   const pdfHeader = encoder.encode("%PDF-1.4\n");
   let currentOffset = pdfHeader.length;

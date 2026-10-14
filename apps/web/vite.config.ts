@@ -5,7 +5,10 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig(() => {
   return {
     plugins: [
-      react(),
+      // main.tsx only mounts the application and exports no components. Keep it
+      // out of Fast Refresh boundary checks; Vite will reload the page when the
+      // bootstrap itself changes, while component modules continue to refresh.
+      react({ exclude: /src\/main\.tsx$/ }),
 
 
       VitePWA({

@@ -1,13 +1,24 @@
 import { useRef, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 interface SignaturePadProps {
   onSignatureChange: (signature: string) => void;
+  onSignatureStateChange?: (hasInk: boolean) => void;
   initialSignature?: string;
 }
 
-export function SignaturePad({ onSignatureChange, initialSignature }: SignaturePadProps) {
+export function SignaturePad({ onSignatureChange, onSignatureStateChange, initialSignature }: SignaturePadProps) {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const hasInkRef = useRef(false);
+
+  const notifyInk = (hasInk: boolean) => {
+    if (hasInkRef.current !== hasInk) {
+      hasInkRef.current = hasInk;
+      onSignatureStateChange?.(hasInk);
+    }
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -34,6 +45,7 @@ export function SignaturePad({ onSignatureChange, initialSignature }: SignatureP
       img.onload = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width / 2, canvas.height / 2);
+        notifyInk(true);
       };
       img.src = initialSignature;
     }
@@ -70,6 +82,9 @@ export function SignaturePad({ onSignatureChange, initialSignature }: SignatureP
     if (ctx) {
       ctx.beginPath();
       ctx.moveTo(coords.x, coords.y);
+      // Any press on the pad counts as a mark so a single
+      // dot is still treated as a real (non-blank) signature.
+      notifyInk(true);
     }
   };
 
@@ -103,6 +118,7 @@ export function SignaturePad({ onSignatureChange, initialSignature }: SignatureP
     const ctx = canvas?.getContext("2d");
     if (canvas && ctx) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      notifyInk(false);
       onSignatureChange("");
     }
   };
@@ -130,7 +146,7 @@ export function SignaturePad({ onSignatureChange, initialSignature }: SignatureP
       />
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
         <button type="button" className="ghost-button" onClick={clearSignature} style={{ fontSize: "0.85rem", padding: "4px 8px" }}>
-          Clear Signature
+          {t("sig_clear")}
         </button>
       </div>
     </div>

@@ -2,6 +2,9 @@ import { Component, ErrorInfo, ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import App from "./App";
+import CertificateVerificationPage from "./CertificateVerificationPage";
+import DriverVerificationPage from "./DriverVerificationPage";
+import VehicleVerificationPage from "./VehicleVerificationPage";
 import { AppProvider } from "./state/AppProvider";
 import "./styles.css";
 import "./i18n";
@@ -62,11 +65,31 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
+const verificationMatch = window.location.pathname.match(
+  /^\/certificate\/verify\/(.+)$/
+);
+
+const vehicleVerificationMatch = window.location.pathname.match(
+  /^\/vehicle\/verify\/(.+)$/
+);
+
+const driverVerificationMatch = window.location.pathname.match(
+  /^\/driver\/verify\/(.+)$/
+);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
-    <AppProvider>
-      <App />
-    </AppProvider>
+    {driverVerificationMatch ? (
+      <DriverVerificationPage driverId={decodeURIComponent(driverVerificationMatch[1])} />
+    ) : vehicleVerificationMatch ? (
+      <VehicleVerificationPage code={decodeURIComponent(vehicleVerificationMatch[1])} />
+    ) : verificationMatch ? (
+      <CertificateVerificationPage code={decodeURIComponent(verificationMatch[1])} />
+    ) : (
+      <AppProvider>
+        <App />
+      </AppProvider>
+    )}
   </ErrorBoundary>
 );
 

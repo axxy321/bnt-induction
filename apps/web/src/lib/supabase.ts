@@ -12,4 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export const organizationName = import.meta.env.VITE_ORGANIZATION_NAME || "BNT Logistics";
-export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "/api";
+const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
+export const apiBaseUrl = /\/api$/i.test(configuredApiBaseUrl)
+  ? configuredApiBaseUrl
+  : `${configuredApiBaseUrl}/api`;

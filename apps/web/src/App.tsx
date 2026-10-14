@@ -1,20 +1,26 @@
 import { Component, ErrorInfo, ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAppState } from "./state/AppProvider";
+import { setAppLanguage } from "./i18n";
+import { useAppState } from "./state/AppContext";
 import { api } from "./lib/api";
 import bntLogo from "./assets/bnt-logistics-logo.png";
 import {
   ThemeMode,
   ComplianceAudit,
+  AuditAssignment,
   SOPItem,
   ComplianceDocumentRequirement,
+  UploadedDocument,
   VehicleRecord,
   ContractorCompanyRecord,
   SafetyIncidentRecord,
   SiteCheckinRecord,
+  BrandingSettings,
+  PolicyRecord,
 } from "./types";
 import { LoginForm } from "./components/auth/LoginForm";
 import { DriverWizard } from "./components/driver/DriverWizard";
+import { DriverScheduleInvitations } from "./components/driver/DriverScheduleInvitations";
 import { AdminDashboard } from "./components/admin/AdminDashboard";
 import { ComplianceDashboardView } from "./components/driver/ComplianceDashboardView";
 import { DocumentComplianceVault } from "./components/driver/DocumentComplianceVault";
@@ -25,6 +31,8 @@ import { SafetyIncidentReporter } from "./components/driver/SafetyIncidentReport
 import { DepotCheckinFatigueHub } from "./components/driver/DepotCheckinFatigueHub";
 import { PreTripInspectionHub } from "./components/driver/PreTripInspectionHub";
 import { DepotGatePassModal } from "./components/driver/DepotGatePassModal";
+import { PolicySignModal } from "./components/driver/PolicySignModal";
+import { ToastHost, showToast } from "./components/ui/Toast";
 import {
   LayoutDashboard,
   GraduationCap,
@@ -41,11 +49,11 @@ import {
   Menu,
   X,
   RefreshCw,
-  LogOut
+  LogOut,
+  CalendarClock
 } from "lucide-react";
 
 import {
-  INITIAL_AUDITS,
   INITIAL_SOPS,
   INITIAL_DOCUMENTS,
   INITIAL_VEHICLES,
@@ -89,7 +97,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     if (this.state.hasError) {
       return (
         <div className="app-shell" style={{ padding: "40px 20px", textAlign: "center" }}>
-          <div className="glass" style={{ maxWidth: "500px", margin: "0 auto", padding: "32px", borderRadius: "20px" }}>
+          <div className="glass card-hover" style={{ maxWidth: "500px", margin: "0 auto", padding: "32px", borderRadius: "20px" }}>
             <h2 style={{ fontSize: "1.4rem", margin: "0 0 8px" }}>Something Went Wrong</h2>
             <p className="muted" style={{ margin: "0 0 16px" }}>
               We hit an unexpected issue. Please refresh the page.
@@ -108,18 +116,81 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+const DOCUMENT_LABELS: Record<string, string> = {
+  driver_license: "Driver Licence",
+  medical_certificate: "Medical Certificate",
+  identity_proof: "Identity Proof",
+  driving_history: "Driving History",
+  right_to_work: "Right to Work",
+  nhvas_bfm_certificate: "NHVR BFM Certificate",
+  dangerous_goods_license: "Dangerous Goods Licence",
+  hrwl_forklift: "HRWL Forklift Ticket",
+  identity_selfie: "Identity Selfie"
+};
+
+function mapUploadedDocumentToVault(doc: UploadedDocument): ComplianceDocumentRequirement {
+  const isMandatory =
+    doc.type === "driver_license" || doc.type === "medical_certificate" || doc.type === "right_to_work";
+  return {
+    id: doc.id,
+    name: DOCUMENT_LABELS[doc.type] ?? doc.type,
+    category: doc.type === "driver_license" ? "Licence" : "Certificates",
+    isMandatory,
+    expiryDate: doc.expiresAt ? doc.expiresAt.split("T")[0] : null,
+    status:
+      doc.status === "approved" ? "Approved" : doc.status === "rejected" ? "Action Required" : "Pending",
+    historyStatus:
+      doc.status === "approved" ? "Approved" : doc.status === "rejected" ? "Rejected" : "Pending Review",
+    uploadedFileUrl: doc.fileUrl,
+    uploadedFileName: doc.name,
+    uploadedAt: doc.uploadedAt ? doc.uploadedAt.split("T")[0] : null,
+    rejectionReason: doc.rejectionReason ?? null,
+    documentType: doc.type
+  };
+}
+
 function AppContent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [theme, toggleTheme] = usePersistentTheme();
   const [driverStep, setDriverStep] = useState(1);
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "induction" | "documents" | "audits" | "learning" | "vehicles" | "contractor" | "incidents" | "checkin" | "pretrip"
+    "dashboard" | "induction" | "schedule" | "documents" | "audits" | "learning" | "vehicles" | "contractor" | "incidents" | "checkin" | "pretrip"
   >("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [gatePassOpen, setGatePassOpen] = useState(false);
+  const [branding, setBranding] = useState<BrandingSettings | null>(null);
+  const [driverPolicies, setDriverPolicies] = useState<PolicyRecord[]>([]);
+  const [signPolicyOpen, setSignPolicyOpen] = useState<PolicyRecord | null>(null);
+  const [showLoginArrival, setShowLoginArrival] = useState(false);
+  const [showLogoutDeparture, setShowLogoutDeparture] = useState(false);
+
+  // Load portal branding (company name, logo, colour, welcome text)
+  useEffect(() => {
+    api.getBranding()
+      .then((settings) => {
+        setBranding(settings);
+        if (settings.primaryColor) {
+          document.documentElement.style.setProperty("--brand-color", settings.primaryColor);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleBrandingUpdated = (next: BrandingSettings) => {
+    setBranding(next);
+    if (next.primaryColor) {
+      document.documentElement.style.setProperty("--brand-color", next.primaryColor);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await logout();
+    setShowLogoutDeparture(true);
+    window.setTimeout(() => setShowLogoutDeparture(false), 1250);
+  };
 
   // Compliance state
-  const [audits, setAudits] = useState<ComplianceAudit[]>(INITIAL_AUDITS);
+  const [audits, setAudits] = useState<AuditAssignment[]>([]);
   const [sops, setSops] = useState<SOPItem[]>(INITIAL_SOPS);
   const [complianceDocs, setComplianceDocs] = useState<ComplianceDocumentRequirement[]>(INITIAL_DOCUMENTS);
   const [vehicles, setVehicles] = useState<VehicleRecord[]>(INITIAL_VEHICLES);
@@ -150,28 +221,97 @@ function AppContent() {
     updateDriverByAdmin,
     resetDriverPassword,
     resetDriverInduction,
+    revokeDriverInduction,
+    archiveDriver,
+    restoreDriver,
+    bulkArchiveDrivers,
+    bulkRestoreDrivers,
     deleteDriver,
     exportAdminReport,
     verifyCertificate
   } = useAppState();
 
+  // Load pending policy signatures for the signed-in driver
+  useEffect(() => {
+    if (session?.user?.id && session.user.role === "driver") {
+      api.getPolicies(session.user.id)
+        .then(setDriverPolicies)
+        .catch(() => setDriverPolicies([]));
+    } else {
+      setDriverPolicies([]);
+    }
+  }, [session?.user?.id, session?.user?.role]);
+
+  const handlePolicySigned = async () => {
+    setSignPolicyOpen(null);
+    if (session?.user?.id) {
+      try {
+        const refreshed = await api.getPolicies(session.user.id);
+        setDriverPolicies(refreshed);
+      } catch {
+        setDriverPolicies((prev) =>
+          prev.map((p) =>
+            p.versionId === signPolicyOpen?.versionId ? { ...p, signed: true } : p
+          )
+        );
+      }
+    }
+  };
+
   // Load real user-scoped records upon authentication
   useEffect(() => {
     if (session?.user?.id) {
       const uid = session.user.id;
-      setVehicles(api.getVehicles(uid));
-      setIncidents(api.getSafetyIncidents(uid));
+      api.getSafetyIncidents(uid).then(setIncidents).catch(() => setIncidents([]));
       setCheckins(api.getSiteCheckins(uid));
-      setPreTripInspections(api.getPreTripInspections(uid));
-      const savedCompany = api.getContractorCompany(uid);
-      if (savedCompany) {
-        setContractor(savedCompany);
-      }
+      api.getPreTripInspections(uid).then(setPreTripInspections).catch(() => setPreTripInspections([]));
+      api.getDriverAudits(uid).then(setAudits).catch(() => setAudits([]));
+      api.getDriverSOPs(uid).then(setSops).catch(() => setSops([]));
+      api.getVehicles(uid).then((rows) => {
+        setVehicles(rows);
+        if (rows.length === 0) {
+          // One-time move of old browser-only vehicles into the shared database
+          try {
+            const raw = window.localStorage.getItem(`bnt_vehicles_${uid}`);
+            const legacy = raw ? (JSON.parse(raw) as VehicleRecord[]) : [];
+            if (legacy.length) {
+              Promise.all(legacy.map((v) => api.saveVehicle(uid, v)))
+                .then((final) => setVehicles(final[final.length - 1] ?? []))
+                .catch(() => {});
+            }
+          } catch {}
+        }
+      }).catch(() => setVehicles([]));
+      api.getContractorCompany(uid)
+        .then((savedCompany) => {
+          if (savedCompany) {
+            setContractor(savedCompany);
+          } else {
+            // One-time move of the old browser-only contractor profile
+            // into the shared database.
+            try {
+              const raw = window.localStorage.getItem(`bnt_contractor_${uid}`);
+              if (raw) {
+                const legacy = JSON.parse(raw) as ContractorCompanyRecord;
+                if (legacy && (legacy.companyName || legacy.abn)) {
+                  api
+                    .saveContractorCompany(uid, { ...legacy, id: uid })
+                    .then(setContractor)
+                    .catch(() => {});
+                }
+              }
+            } catch {}
+          }
+        })
+        .catch(() => {});
     } else {
       setVehicles([]);
       setIncidents([]);
       setCheckins([]);
       setPreTripInspections([]);
+      setAudits([]);
+      setSops([]);
+      setContractor(INITIAL_CONTRACTOR_COMPANY);
     }
   }, [session?.user?.id]);
 
@@ -182,12 +322,21 @@ function AppContent() {
     }
   }, [driverBundle?.progress?.currentStep]);
 
+  // Sync the Vault with the driver's real documents stored in the database
+  useEffect(() => {
+    if (!driverBundle?.documents?.length) return;
+    setComplianceDocs(driverBundle.documents.map(mapUploadedDocumentToVault));
+  }, [driverBundle?.documents]);
+
   const handleToggleModule = async (moduleItem: any) => {
     if (!driverBundle) return;
     const updated = driverBundle.learningProgress.map((m) =>
       m.sectionId === moduleItem.sectionId ? { ...m, completed: !m.completed } : m
     );
-    await saveStep(3, { sections: updated.map((m) => ({ sectionId: m.sectionId, completed: m.completed })) });
+    await saveStep(3, {
+      allowPartial: true,
+      sections: updated.map((m) => ({ sectionId: m.sectionId, completed: m.completed }))
+    });
   };
 
   const handleStartModule = async (moduleItem: any) => {
@@ -198,30 +347,56 @@ function AppContent() {
     await saveStep(5, { accepted, signature });
   };
 
-  const handleCompleteAudit = (auditId: string) => {
-    setAudits((prev) =>
-      prev.map((a) =>
-        a.id === auditId
-          ? { ...a, status: "Passed", attemptsCount: a.attemptsCount + 1, lastAttemptDate: new Date().toISOString().split("T")[0] }
-          : a
-      )
-    );
+  const handleCompleteAudit = async (assignment: AuditAssignment, answers: Record<number, boolean>) => {
+    await api.completeAuditAssignment(assignment.id, answers);
+    if (session?.user?.id) {
+      const refreshed = await api.getDriverAudits(session.user.id);
+      setAudits(refreshed);
+    }
   };
 
-  const handleCompleteSOP = (sopId: string) => {
+  const handleCompleteSOP = async (sopId: string) => {
+    if (!session?.user?.id) return;
+    const previous = sops.find((s) => s.id === sopId)?.status ?? "No Attempt";
     setSops((prev) =>
       prev.map((s) => (s.id === sopId ? { ...s, status: "Passed" } : s))
     );
+    try {
+      await api.completeSOP(session.user.id, sopId);
+    } catch {
+      setSops((prev) =>
+        prev.map((s) => (s.id === sopId ? { ...s, status: previous } : s))
+      );
+    }
   };
 
-  const handleUploadComplianceDoc = (docId: string, fileName: string, expiryDate: string | null) => {
+  const handleUploadComplianceDoc = async (
+    docId: string,
+    fileName: string,
+    file: File | null,
+    expiryDate: string | null
+  ) => {
+    const target = complianceDocs.find((d) => d.id === docId);
+    if (!target) return;
+
+    // Persist the replacement through the real document API.
+    // The profile refresh that follows re-syncs the Vault with the server state.
+    if (session && target.documentType && file) {
+      try {
+        await uploadDocument({ type: target.documentType, file });
+        return;
+      } catch {
+        // Fall through so the Vault still reflects the attempt locally.
+      }
+    }
+
     setComplianceDocs((prev) =>
       prev.map((d) =>
         d.id === docId
           ? {
               ...d,
-              status: "Approved",
-              historyStatus: "Approved",
+              status: "Pending",
+              historyStatus: "Pending Review",
               uploadedFileName: fileName,
               expiryDate: expiryDate || d.expiryDate,
               uploadedAt: new Date().toISOString().split("T")[0],
@@ -231,19 +406,25 @@ function AppContent() {
     );
   };
 
-  const handleAddVehicle = (newVeh: VehicleRecord) => {
+  const handleAddVehicle = async (newVeh: VehicleRecord) => {
     if (session?.user?.id) {
-      const updated = api.saveVehicle(session.user.id, newVeh);
-      setVehicles(updated);
+      setVehicles((prev) => [newVeh, ...prev]);
+      try {
+        const updated = await api.saveVehicle(session.user.id, newVeh);
+        setVehicles(updated);
+        showToast(t("veh_saved"));
+      } catch {
+        // keep the optimistic copy if the save fails
+      }
     } else {
       setVehicles((prev) => [newVeh, ...prev]);
     }
   };
 
-  const handleReportIncident = (newInc: SafetyIncidentRecord) => {
+  const handleReportIncident = async (newInc: SafetyIncidentRecord) => {
     if (session?.user?.id) {
-      const updated = api.reportSafetyIncident(session.user.id, newInc);
-      setIncidents(updated);
+      const saved = await api.reportSafetyIncident(session.user.id, newInc);
+      setIncidents((prev) => [saved, ...prev]);
     } else {
       setIncidents((prev) => [newInc, ...prev]);
     }
@@ -258,10 +439,10 @@ function AppContent() {
     }
   };
 
-  const handleSavePreTripInspection = (record: any) => {
+  const handleSavePreTripInspection = async (record: any) => {
     if (session?.user?.id) {
-      const updated = api.savePreTripInspection(session.user.id, record);
-      setPreTripInspections(updated);
+      const savedRecord = await api.savePreTripInspection(session.user.id, record);
+      setPreTripInspections((prev) => [savedRecord, ...prev]);
 
       // If inspection detected a defect, automatically ground the vehicle
       if (record.overallStatus && record.overallStatus !== "Fit for Duty") {
@@ -272,8 +453,16 @@ function AppContent() {
             ...existing,
             status: "Maintenance Required"
           };
-          const nextVehicles = api.saveVehicle(session.user.id, updatedVeh);
-          setVehicles(nextVehicles);
+          setVehicles((prev) =>
+            prev.map((v) => (v.id === existing.id ? updatedVeh : v))
+          );
+          try {
+            const nextVehicles = await api.saveVehicle(session.user.id, updatedVeh);
+            setVehicles(nextVehicles);
+            showToast(t("veh_saved"));
+          } catch {
+            // keep the optimistic grounding if the save fails
+          }
         }
       }
     } else {
@@ -304,10 +493,16 @@ function AppContent() {
     }
   };
 
-  const handleUpdateContractor = (updatedCompany: ContractorCompanyRecord) => {
+  const handleUpdateContractor = async (updatedCompany: ContractorCompanyRecord) => {
     if (session?.user?.id) {
-      const saved = api.saveContractorCompany(session.user.id, updatedCompany);
-      setContractor(saved);
+      try {
+        const saved = await api.saveContractorCompany(session.user.id, updatedCompany);
+        setContractor(saved);
+      } catch {
+        // Keep the update in the UI even if the database save fails,
+        // so the driver is never blocked by a network hiccup.
+        setContractor(updatedCompany);
+      }
     } else {
       setContractor(updatedCompany);
     }
@@ -315,100 +510,37 @@ function AppContent() {
 
   return (
     <div className="app-shell flex flex-col min-h-screen">
+      <ToastHost />
+      {showLoginArrival && (
+        <div className="login-arrival" role="status" aria-label="Welcome. Your portal is opening.">
+          <div className="login-arrival-road" />
+          <Truck className="login-arrival-truck" aria-hidden="true" />
+          <span className="login-arrival-message">{t("login_success")}</span>
+        </div>
+      )}
+      {showLogoutDeparture && (
+        <div className="logout-departure" role="status" aria-label={t("sign_out")}>
+          <div className="logout-departure-road" />
+          <Truck className="logout-departure-truck" aria-hidden="true" />
+          <span className="logout-departure-message">{t("sign_out")}</span>
+        </div>
+      )}
       {/* Global Modern Top Header & Navigation */}
-      <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-4 md:px-8 py-3 transition-all">
+      <header className="app-header sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-4 md:px-8 py-3 transition-all">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           {/* Logo & Platform Name */}
           <div className="flex items-center gap-3">
-            <img src={bntLogo} alt="BNT Logistics" className="h-9 w-auto object-contain" />
+            <img src={branding?.logoUrl || bntLogo} alt={branding?.companyName || "BNT Logistics"} className="h-9 w-auto object-contain" />
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-extrabold text-white tracking-tight">BNT LOGISTICS</span>
+                <span className="text-base font-extrabold text-white tracking-tight">{branding?.companyName || "BNT LOGISTICS"}</span>
                 <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
-                  Compliance Portal
+                  {t("compliance_portal")}
                 </span>
               </div>
-              <span className="text-xs text-slate-400 block font-medium">Site Compliance & Induction Platform</span>
+              <span className="text-xs text-slate-400 block font-medium">{t("platform_subtitle")}</span>
             </div>
           </div>
-
-          {/* Desktop Navigation Tabs */}
-          {session && session.user.role === "driver" && (
-            <nav className="hidden 2xl:flex items-center gap-1 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800 shadow-inner">
-              <button
-                onClick={() => setActiveTab("dashboard")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "dashboard" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <LayoutDashboard className="w-3.5 h-3.5" /> Dashboard
-              </button>
-              <button
-                onClick={() => setActiveTab("induction")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "induction" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <GraduationCap className="w-3.5 h-3.5" /> Induction
-              </button>
-              <button
-                onClick={() => setActiveTab("documents")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "documents" ? "bg-purple-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" /> Vault ({complianceDocs.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("audits")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "audits" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <ClipboardCheck className="w-3.5 h-3.5" /> Audits & SOPs
-              </button>
-              <button
-                onClick={() => setActiveTab("vehicles")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "vehicles" ? "bg-amber-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <Truck className="w-3.5 h-3.5" /> Fleet Pass
-              </button>
-              <button
-                onClick={() => setActiveTab("contractor")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "contractor" ? "bg-indigo-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <Building2 className="w-3.5 h-3.5" /> Contractor
-              </button>
-              <button
-                onClick={() => setActiveTab("incidents")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "incidents" ? "bg-rose-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <AlertTriangle className="w-3.5 h-3.5" /> Hazards ({incidents.filter(i => i.status !== "Resolved").length})
-              </button>
-              <button
-                onClick={() => setActiveTab("pretrip")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "pretrip" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <ClipboardList className="w-3.5 h-3.5 text-emerald-400" /> Pre-Trip
-              </button>
-              <button
-                onClick={() => setActiveTab("checkin")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  activeTab === "checkin" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
-                }`}
-              >
-                <MapPin className="w-3.5 h-3.5" /> Depot Check-In
-              </button>
-            </nav>
-          )}
 
           {/* User Controls & Mobile Toggle */}
           <div className="flex items-center gap-3">
@@ -418,16 +550,37 @@ function AppContent() {
                 onClick={() => setGatePassOpen(true)}
                 className="hidden sm:flex px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-colors items-center gap-1.5"
               >
-                <QrCode className="w-3.5 h-3.5" /> Gate Pass
+                <QrCode className="w-3.5 h-3.5" /> {t("gate_pass")}
               </button>
             )}
+            {/* Language Switcher — English / ਪੰਜਾਬੀ */}
+            <div className="flex items-center rounded-lg bg-slate-800 border border-slate-700 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setAppLanguage("en")}
+                className={`px-2.5 py-1.5 text-[11px] font-black transition-colors ${
+                  i18n.language === "en" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setAppLanguage("pa")}
+                className={`px-2.5 py-1.5 text-[11px] font-black transition-colors ${
+                  i18n.language === "pa" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                ਪੰਜਾਬੀ
+              </button>
+            </div>
             <button
               type="button"
               onClick={toggleTheme}
               className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition-colors flex items-center gap-1.5"
             >
               {theme === "light" ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
-              <span>{theme === "light" ? "Dark" : "Light"}</span>
+              <span>{theme === "light" ? t("dark") : t("light")}</span>
             </button>
 
             {session && (
@@ -435,16 +588,16 @@ function AppContent() {
                 <div className="hidden md:block text-right">
                   <span className="text-xs font-bold text-white block">{driverBundle?.driver?.fullName || session.user.email}</span>
                   <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider block">
-                    {session.user.role === "admin" ? "Compliance Administrator" : "Heavy Vehicle Driver"}
+                    {session.user.role === "admin" ? t("admin_role") : t("driver_role")}
                   </span>
                 </div>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={() => void handleSignOut()}
                   className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
+                  <span>{t("sign_out")}</span>
                 </button>
               </div>
             )}
@@ -453,7 +606,7 @@ function AppContent() {
             {session && session.user.role === "driver" && (
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="2xl:hidden p-2 rounded-lg bg-slate-800 text-slate-200 hover:text-white border border-slate-700"
+                className="md:hidden p-2 rounded-lg bg-slate-800 text-slate-200 hover:text-white border border-slate-700"
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -461,68 +614,162 @@ function AppContent() {
           </div>
         </div>
 
+        {/* Secondary Navigation Row — full tab bar below the brand row */}
+        {session && session.user.role === "driver" && (
+          <div className="max-w-7xl mx-auto mt-4">
+            <nav className="hidden md:flex items-center justify-center gap-1 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800 shadow-inner overflow-x-auto">
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "dashboard" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" /> {t("nav_dashboard")}
+              </button>
+              <button
+                onClick={() => setActiveTab("schedule")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "schedule" ? "bg-amber-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <CalendarClock className="w-3.5 h-3.5" /> {t("nav_schedule")}
+              </button>
+              <button
+                onClick={() => setActiveTab("induction")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "induction" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <GraduationCap className="w-3.5 h-3.5" /> {t("nav_induction")}
+              </button>
+              <button
+                onClick={() => setActiveTab("documents")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "documents" ? "bg-purple-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" /> {t("nav_vault")} ({complianceDocs.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("audits")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "audits" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" /> {t("nav_audits")}
+              </button>
+              <button
+                onClick={() => setActiveTab("vehicles")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "vehicles" ? "bg-amber-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5" /> {t("nav_fleet")}
+              </button>
+              <button
+                onClick={() => setActiveTab("contractor")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "contractor" ? "bg-indigo-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" /> {t("nav_contractor")}
+              </button>
+              <button
+                onClick={() => setActiveTab("incidents")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "incidents" ? "bg-rose-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5" /> {t("nav_hazards")} ({incidents.filter(i => i.status !== "Resolved").length})
+              </button>
+              <button
+                onClick={() => setActiveTab("pretrip")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "pretrip" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <ClipboardList className="w-3.5 h-3.5 text-emerald-400" /> {t("nav_pretrip")}
+              </button>
+              <button
+                onClick={() => setActiveTab("checkin")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === "checkin" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
+                }`}
+              >
+                <MapPin className="w-3.5 h-3.5" /> {t("nav_checkin")}
+              </button>
+            </nav>
+          </div>
+        )}
+
         {/* Mobile Navigation Drawer */}
         {session && session.user.role === "driver" && mobileMenuOpen && (
-          <div className="2xl:hidden mt-3 pt-3 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 animate-fadeIn">
+          <div className="md:hidden mt-3 pt-3 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 animate-fadeIn">
             <button
               onClick={() => { setActiveTab("dashboard"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "dashboard" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <LayoutDashboard className="w-4 h-4" /> Dashboard
+              <LayoutDashboard className="w-4 h-4" /> {t("nav_dashboard")}
+            </button>
+            <button
+              onClick={() => { setActiveTab("schedule"); setMobileMenuOpen(false); }}
+              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "schedule" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-300"}`}
+            >
+              <CalendarClock className="w-4 h-4" /> {t("nav_schedule")}
             </button>
             <button
               onClick={() => { setActiveTab("induction"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "induction" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <GraduationCap className="w-4 h-4" /> Induction
+              <GraduationCap className="w-4 h-4" /> {t("nav_induction")}
             </button>
             <button
               onClick={() => { setActiveTab("documents"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "documents" ? "bg-purple-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <FileText className="w-4 h-4" /> Vault ({complianceDocs.length})
+              <FileText className="w-4 h-4" /> {t("nav_vault")} ({complianceDocs.length})
             </button>
             <button
               onClick={() => { setActiveTab("audits"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "audits" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <ClipboardCheck className="w-4 h-4" /> Audits & SOPs
+              <ClipboardCheck className="w-4 h-4" /> {t("nav_audits")}
             </button>
             <button
               onClick={() => { setActiveTab("vehicles"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "vehicles" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <Truck className="w-4 h-4" /> Fleet Pass
+              <Truck className="w-4 h-4" /> {t("nav_fleet")}
             </button>
             <button
               onClick={() => { setActiveTab("contractor"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "contractor" ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <Building2 className="w-4 h-4" /> Contractor Profile
+              <Building2 className="w-4 h-4" /> {t("nav_contractor")}
             </button>
             <button
               onClick={() => { setActiveTab("incidents"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "incidents" ? "bg-rose-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <AlertTriangle className="w-4 h-4" /> Safety Hazards
+              <AlertTriangle className="w-4 h-4" /> {t("nav_hazards")}
             </button>
             <button
               onClick={() => { setActiveTab("pretrip"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "pretrip" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <ClipboardList className="w-4 h-4 text-emerald-400" /> Pre-Trip Inspection
+              <ClipboardList className="w-4 h-4 text-emerald-400" /> {t("nav_pretrip")}
             </button>
             <button
               onClick={() => { setActiveTab("checkin"); setMobileMenuOpen(false); }}
               className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "checkin" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
             >
-              <MapPin className="w-4 h-4" /> Depot Check-In
+              <MapPin className="w-4 h-4" /> {t("nav_checkin")}
             </button>
             <button
               onClick={() => { setGatePassOpen(true); setMobileMenuOpen(false); }}
               className="p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
             >
-              <QrCode className="w-4 h-4" /> View Depot Gate Pass
+              <QrCode className="w-4 h-4" /> {t("view_gate_pass")}
             </button>
           </div>
         )}
@@ -532,12 +779,21 @@ function AppContent() {
       {loading ? (
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-8 space-y-6">
           <div className="text-center py-20 flex flex-col items-center justify-center">
-            <RefreshCw className="w-8 h-8 animate-spin text-emerald-400 mb-3" />
-            <p className="text-slate-400 text-sm font-medium">Initializing Compliance Hub...</p>
+            <div className="app-loading-road" aria-hidden="true">
+              <Truck className="app-loading-truck" />
+            </div>
+            <p className="text-slate-400 text-sm font-medium">{t("initializing")}</p>
           </div>
         </main>
       ) : !session ? (
-        <LoginForm onLogin={(email, pass, role) => login({ email, password: pass, role })} loading={authLoading} error={authError} />
+        <LoginForm branding={branding} onRequestPasswordHelp={async (email) => {
+          await api.requestPasswordHelp(email);
+        }} onLogin={async (email, pass, role) => {
+          await login({ email, password: pass, role });
+          setShowLoginArrival(true);
+          window.setTimeout(() => setShowLoginArrival(false), 1550);
+          showToast(t("login_success"));
+        }} loading={authLoading} error={authError} />
       ) : (
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-8 space-y-6">
           {session.user.role === "driver" && driverBundle ? (
@@ -549,13 +805,15 @@ function AppContent() {
                   sops={sops}
                   documents={complianceDocs}
                   vehicles={vehicles}
-                onNavigateTab={(tab) => setActiveTab(tab as any)}
-                onStartAudit={() => setActiveTab("audits")}
-                onStartSOP={() => setActiveTab("learning")}
-                onUploadDoc={() => setActiveTab("documents")}
-                onOpenGatePass={() => setGatePassOpen(true)}
-              />
-            )}
+                  policies={driverPolicies}
+                  onNavigateTab={(tab) => setActiveTab(tab as any)}
+                  onStartAudit={() => setActiveTab("audits")}
+                  onStartSOP={() => setActiveTab("learning")}
+                  onUploadDoc={() => setActiveTab("documents")}
+                  onOpenGatePass={() => setGatePassOpen(true)}
+                  onSignPolicy={(policy) => setSignPolicyOpen(policy)}
+                />
+              )}
 
             {activeTab === "induction" && (
               <DriverWizard
@@ -563,7 +821,17 @@ function AppContent() {
                 currentStep={driverStep}
                 onSetStep={setDriverStep}
                 onSaveProfile={saveProfile}
-                onUploadDocument={(type, file) => uploadDocument({ type, file })}
+                onUploadDocument={(type, file, onProgress) => uploadDocument({ type, file }, onProgress)}
+                onCompleteStep2={async () => {
+                  await saveStep(2, {});
+                }}
+                onCompleteStep3={async () => {
+                  const sections = driverBundle.learningProgress.map((m) => ({
+                    sectionId: m.sectionId,
+                    completed: m.completed
+                  }));
+                  await saveStep(3, { sections });
+                }}
                 onToggleModule={handleToggleModule}
                 onStartModule={handleStartModule}
                 onSubmitQuiz={submitQuiz}
@@ -572,6 +840,17 @@ function AppContent() {
                 onSubmitFeedback={submitDriverFeedback}
                 quizQuestions={quizQuestions}
                 loading={loading}
+              />
+            )}
+
+            {activeTab === "schedule" && (
+              <DriverScheduleInvitations
+                session={session}
+                onStartInduction={(scheduleItemId, itemTitle) => {
+                  sessionStorage.setItem("pendingScheduleItemId", scheduleItemId);
+                  sessionStorage.setItem("pendingScheduleItemTitle", itemTitle);
+                  setActiveTab("induction");
+                }}
               />
             )}
 
@@ -592,20 +871,21 @@ function AppContent() {
               />
             )}
 
-            {activeTab === "vehicles" && (
-              <VehicleManagementHub
-                vehicles={vehicles}
-                onAddVehicle={handleAddVehicle}
-                driverName={driverBundle.driver.fullName}
-                driverNumber={driverBundle.driver.licenceNumber}
-                contactNumber={driverBundle.driver.phone}
-              />
-            )}
+              {activeTab === "vehicles" && (
+                <VehicleManagementHub
+                  vehicles={vehicles}
+                  onAddVehicle={handleAddVehicle}
+                  driverName={driverBundle.driver.fullName}
+                  driverNumber={driverBundle.driver.licenceNumber}
+                  contactNumber={driverBundle.driver.phone}
+                />
+              )}
 
             {activeTab === "contractor" && (
               <ContractorCompanyHub
                 contractor={contractor}
                 onUpdateContractor={handleUpdateContractor}
+                userId={session.user.id}
               />
             )}
 
@@ -644,9 +924,17 @@ function AppContent() {
             onResetPassword={resetDriverPassword}
             onResetInduction={resetDriverInduction}
             onDeleteDriver={deleteDriver}
+            onArchiveDriver={archiveDriver}
+            onRestoreDriver={restoreDriver}
+            onBulkArchiveDrivers={bulkArchiveDrivers}
+            onBulkRestoreDrivers={bulkRestoreDrivers}
             onExportReport={exportAdminReport}
             onVerifyCertificate={verifyCertificate}
+            onRevokeInduction={revokeDriverInduction}
             loading={loading}
+            session={session}
+            branding={branding}
+            onBrandingUpdated={handleBrandingUpdated}
           />
         ) : (
           <div className="text-center py-20">
@@ -662,6 +950,16 @@ function AppContent() {
           isOpen={gatePassOpen}
           onClose={() => setGatePassOpen(false)}
           driverBundle={driverBundle}
+        />
+      )}
+
+      {/* Policy E-Sign Modal */}
+      {session?.user.role === "driver" && signPolicyOpen && (
+        <PolicySignModal
+          policy={signPolicyOpen}
+          session={session}
+          onClose={() => setSignPolicyOpen(null)}
+          onSigned={handlePolicySigned}
         />
       )}
     </div>

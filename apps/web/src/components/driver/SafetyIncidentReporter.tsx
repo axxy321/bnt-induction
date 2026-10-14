@@ -1,5 +1,7 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SafetyIncidentRecord, IncidentCategory, IncidentSeverity } from "../../types";
+import { tStatus } from "../../i18n";
 import { AlertTriangle, MapPin, Plus, CheckCircle2, X, ShieldAlert } from "lucide-react";
 
 interface SafetyIncidentReporterProps {
@@ -8,6 +10,7 @@ interface SafetyIncidentReporterProps {
 }
 
 export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIncidentReporterProps) {
+  const { t } = useTranslation();
   const [showForm, setShowForm] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("All");
   
@@ -19,6 +22,41 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
   const [description, setDescription] = useState("");
   const [immediateActions, setImmediateActions] = useState("");
   const [photoName, setPhotoName] = useState<string | undefined>(undefined);
+
+  const catLabel = (c: string) =>
+    c === "Near Miss"
+      ? t("inc_cat_near_miss")
+      : c === "Vehicle Defect"
+      ? t("inc_cat_vehicle")
+      : c === "Spill / Leak"
+      ? t("inc_cat_spill")
+      : c === "Safety Hazard"
+      ? t("inc_cat_hazard")
+      : c === "Injury / Illness"
+      ? t("inc_cat_injury")
+      : c;
+
+  const sevLabel = (s: string) =>
+    s === "Low"
+      ? t("inc_sev_low_word")
+      : s === "Medium"
+      ? t("inc_sev_medium_word")
+      : s === "High"
+      ? t("inc_sev_high_word")
+      : s === "Critical"
+      ? t("inc_sev_critical_word")
+      : s;
+
+  const sevOption = (s: string) =>
+    s === "Low"
+      ? t("inc_sev_low")
+      : s === "Medium"
+      ? t("inc_sev_medium")
+      : s === "High"
+      ? t("inc_sev_high")
+      : s === "Critical"
+      ? t("inc_sev_critical")
+      : s;
 
   const calculateRiskScore = (sev: IncidentSeverity) => {
     switch (sev) {
@@ -40,8 +78,8 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
       severity,
       location,
       description,
-      immediateActionsTaken: immediateActions || "Site supervisor informed immediately.",
-      reportedBy: "Logged User",
+      immediateActionsTaken: immediateActions || t("inc_default_actions"),
+      reportedBy: t("inc_reported_by"),
       reportedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
       photoFileName: photoName,
       status: "Under Review",
@@ -69,13 +107,13 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
           <div>
             <div className="flex items-center gap-3 mb-1">
               <AlertTriangle className="w-6 h-6 text-rose-400" />
-              <h2 className="text-2xl font-black text-white tracking-tight">Safety Incident & Hazard Reporting</h2>
+              <h2 className="text-2xl font-black text-white tracking-tight">{t("inc_title")}</h2>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-rose-500/10 border border-rose-500/30 text-rose-400">
-                BNT WHS Safety Module
+                {t("inc_badge")}
               </span>
             </div>
             <p className="text-slate-400 text-sm">
-              Log Near Misses, Vehicle Defects, Spills, or Hazards with automated risk scoring and supervisor alerts.
+              {t("inc_sub")}
             </p>
           </div>
 
@@ -84,7 +122,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
             className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg flex items-center gap-2"
           >
             <ShieldAlert className="w-4 h-4" />
-            <span>{showForm ? "Close Form" : "Log New Hazard / Incident"}</span>
+            <span>{showForm ? t("inc_close_form") : t("inc_new")}</span>
           </button>
         </div>
       </div>
@@ -94,19 +132,19 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
         <form onSubmit={handleSubmit} className="bg-slate-900/90 border border-rose-900/40 rounded-2xl p-6 shadow-2xl space-y-5 animate-fadeIn">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-rose-400" /> Report Safety Incident or Hazard
+              <ShieldAlert className="w-5 h-5 text-rose-400" /> {t("inc_form_title")}
             </h3>
-            <span className="text-xs text-rose-400 font-semibold">Immediate Risk Assessment Engine</span>
+            <span className="text-xs text-rose-400 font-semibold">{t("inc_engine")}</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="inc-title" className="block text-xs font-bold text-slate-300 mb-1">Incident / Hazard Title</label>
+               <label htmlFor="inc-title" className="block text-xs font-bold text-slate-300 mb-1">{t("inc_field_title")}</label>
               <input
                 id="inc-title"
                 name="title"
                 type="text"
-                placeholder="e.g. Hydraulic fluid leak on loading bay 3"
+                 placeholder={t("inc_title_ph")}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500"
@@ -115,7 +153,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
             </div>
 
             <div>
-              <label htmlFor="inc-category" className="block text-xs font-bold text-slate-300 mb-1">Category</label>
+               <label htmlFor="inc-category" className="block text-xs font-bold text-slate-300 mb-1">{t("inc_category")}</label>
               <select
                 id="inc-category"
                 name="category"
@@ -123,16 +161,16 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
                 onChange={(e) => setCategory(e.target.value as any)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500"
               >
-                <option value="Near Miss">Near Miss</option>
-                <option value="Vehicle Defect">Vehicle Defect</option>
-                <option value="Spill / Leak">Spill / Leak</option>
-                <option value="Safety Hazard">Safety Hazard</option>
-                <option value="Injury / Illness">Injury / Illness</option>
+                 <option value="Near Miss">{t("inc_cat_near_miss")}</option>
+                 <option value="Vehicle Defect">{t("inc_cat_vehicle")}</option>
+                 <option value="Spill / Leak">{t("inc_cat_spill")}</option>
+                 <option value="Safety Hazard">{t("inc_cat_hazard")}</option>
+                 <option value="Injury / Illness">{t("inc_cat_injury")}</option>
               </select>
             </div>
 
             <div>
-              <label htmlFor="inc-severity" className="block text-xs font-bold text-slate-300 mb-1">Severity Rating</label>
+               <label htmlFor="inc-severity" className="block text-xs font-bold text-slate-300 mb-1">{t("inc_severity")}</label>
               <select
                 id="inc-severity"
                 name="severity"
@@ -140,15 +178,15 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
                 onChange={(e) => setSeverity(e.target.value as any)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500 font-bold"
               >
-                <option value="Low">Low (Low Impact / Controlled)</option>
-                <option value="Medium">Medium (Requires Intervention)</option>
-                <option value="High">High (Immediate Danger)</option>
-                <option value="Critical">Critical (Halt Operations)</option>
+                 <option value="Low">{sevOption("Low")}</option>
+                 <option value="Medium">{sevOption("Medium")}</option>
+                 <option value="High">{sevOption("High")}</option>
+                 <option value="Critical">{sevOption("Critical")}</option>
               </select>
             </div>
 
             <div>
-              <label htmlFor="inc-location" className="block text-xs font-bold text-slate-300 mb-1">Depot / Site Location</label>
+               <label htmlFor="inc-location" className="block text-xs font-bold text-slate-300 mb-1">{t("inc_location")}</label>
               <input
                 id="inc-location"
                 name="location"
@@ -161,12 +199,12 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
             </div>
 
             <div className="md:col-span-2">
-              <label htmlFor="inc-description" className="block text-xs font-bold text-slate-300 mb-1">Detailed Description of What Happened</label>
-              <textarea
-                id="inc-description"
-                name="description"
-                rows={3}
-                placeholder="Describe sequence of events, equipment involved, and environmental factors..."
+               <label htmlFor="inc-description" className="block text-xs font-bold text-slate-300 mb-1">{t("inc_desc")}</label>
+               <textarea
+                 id="inc-description"
+                 name="description"
+                 rows={3}
+                 placeholder={t("inc_desc_ph")}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500"
@@ -175,12 +213,12 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
             </div>
 
             <div className="md:col-span-2">
-              <label htmlFor="inc-immediateActions" className="block text-xs font-bold text-slate-300 mb-1">Immediate Corrective Actions Taken</label>
-              <input
-                id="inc-immediateActions"
-                name="immediateActions"
-                type="text"
-                placeholder="e.g. Applied spill kit, notified gate supervisor, cordoned area with safety cones..."
+               <label htmlFor="inc-immediateActions" className="block text-xs font-bold text-slate-300 mb-1">{t("inc_actions")}</label>
+               <input
+                 id="inc-immediateActions"
+                 name="immediateActions"
+                 type="text"
+                 placeholder={t("inc_actions_ph")}
                 value={immediateActions}
                 onChange={(e) => setImmediateActions(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-rose-500"
@@ -188,7 +226,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
             </div>
 
             <div>
-              <label htmlFor="inc-photo" className="block text-xs font-bold text-slate-300 mb-1">Attach Photo Evidence (Optional)</label>
+               <label htmlFor="inc-photo" className="block text-xs font-bold text-slate-300 mb-1">{t("inc_photo")}</label>
               <input
                 id="inc-photo"
                 name="photo"
@@ -200,7 +238,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
             </div>
 
             <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/80 border border-slate-700">
-              <div className="text-[10px] uppercase font-extrabold text-slate-400">Calculated Risk Index:</div>
+               <div className="text-[10px] uppercase font-extrabold text-slate-400">{t("inc_risk_index")}</div>
               <div
                 className={`px-3 py-1 rounded-lg text-xs font-black ${
                   severity === "Low"
@@ -210,7 +248,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
                     : "bg-rose-500/20 text-rose-400"
                 }`}
               >
-                Score {calculateRiskScore(severity)} / 10 ({severity})
+                {t("inc_score", { score: calculateRiskScore(severity), severity: sevLabel(severity) })}
               </div>
             </div>
           </div>
@@ -221,13 +259,13 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
               onClick={() => setShowForm(false)}
               className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
             >
-              Cancel
+              {t("inc_cancel")}
             </button>
             <button
               type="submit"
               className="px-6 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg"
             >
-              Submit Safety Report
+              {t("inc_submit")}
             </button>
           </div>
         </form>
@@ -245,7 +283,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
                 : "bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-800"
             }`}
           >
-            {cat}
+            {catLabel(cat)}
           </button>
         ))}
       </div>
@@ -255,7 +293,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
         {filteredIncidents.length === 0 ? (
           <div className="text-center py-12 bg-slate-900/60 border border-slate-800 rounded-2xl">
             <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-            <p className="text-slate-400 text-sm font-medium">No recorded incidents in this category.</p>
+            <p className="text-slate-400 text-sm font-medium">{t("inc_empty")}</p>
           </div>
         ) : (
           filteredIncidents.map((inc) => (
@@ -279,7 +317,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
                         : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                     }`}
                   >
-                    Severity: {inc.severity} (Risk {inc.riskScore}/10)
+                     Severity: {t("inc_severity_label", { severity: sevLabel(inc.severity), score: inc.riskScore })}
                   </span>
 
                   <span
@@ -289,7 +327,7 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
                         : "bg-amber-500/10 text-amber-400"
                     }`}
                   >
-                    ● {inc.status}
+                    ● {tStatus(inc.status, t)}
                   </span>
                 </div>
               </div>
@@ -298,14 +336,14 @@ export function SafetyIncidentReporter({ incidents, onReportIncident }: SafetyIn
                 <p>{inc.description}</p>
 
                 <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Immediate Corrective Actions</span>
+                   <span className="text-[10px] uppercase font-bold text-slate-400 block">{t("inc_actions_label")}</span>
                   <p className="text-slate-200 text-xs">{inc.immediateActionsTaken}</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/60">
-                <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-rose-400" /> Location: <strong className="text-slate-300">{inc.location}</strong></span>
-                <span>Reported by: <strong className="text-slate-300">{inc.reportedBy}</strong> ({inc.reportedAt})</span>
+                <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-rose-400" /> {t("inc_location_label")} <strong className="text-slate-300">{inc.location}</strong></span>
+                <span>{t("inc_reported", { by: inc.reportedBy, at: inc.reportedAt })}</span>
               </div>
             </div>
           ))

@@ -1,4 +1,5 @@
 import React, { useState, FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, X } from "lucide-react";
 import { AdminDriverRow, DriverFormInput } from "../../types";
 
@@ -10,6 +11,7 @@ interface DriverFormModalProps {
 }
 
 export function DriverFormModal({ driver, onSave, onClose, loading }: DriverFormModalProps) {
+  const { t } = useTranslation();
   const isEditing = !!driver;
 
   const [formData, setFormData] = useState({
@@ -32,19 +34,22 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!formData.fullName.trim() || formData.fullName.trim().length < 2) {
-      errs.fullName = "Full name is required.";
+      errs.fullName = t("drf_err_name");
     }
     if (!formData.email.trim() || !formData.email.includes("@")) {
-      errs.email = "Valid email is required.";
+      errs.email = t("drf_err_email");
     }
     if (!formData.phone.trim() || formData.phone.trim().length < 5) {
-      errs.phone = "Valid mobile number is required.";
+      errs.phone = t("drf_err_phone");
     }
     if (!formData.address.trim() || formData.address.trim().length < 3) {
-      errs.address = "Home address is required.";
+      errs.address = t("drf_err_address");
+    }
+    if (!/^[A-Z0-9]{8}$/.test(formData.licenceNumber.trim().toUpperCase())) {
+      errs.licenceNumber = t("reg_err_licence");
     }
     if (!isEditing && (!formData.password || formData.password.length < 8)) {
-      errs.password = "Password must be at least 8 characters.";
+      errs.password = t("drf_err_password");
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -59,7 +64,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
     try {
       await onSave(formData);
     } catch (err: any) {
-      setSubmitError(err?.message || "Failed to save driver account. Please try again.");
+      setSubmitError(err?.message || t("drf_err_save"));
     } finally {
       setIsSubmitting(false);
     }
@@ -95,7 +100,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
           <h3 style={{ fontSize: "1.3rem", fontWeight: 700, margin: 0 }}>
-            {isEditing ? `Edit Driver: ${driver.fullName}` : "Add New Heavy Vehicle Driver"}
+            {isEditing ? t("drf_edit_title", { name: driver.fullName }) : t("drf_add_title")}
           </h3>
           <button
             type="button"
@@ -131,11 +136,11 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                Full Name *
+                {t("drf_full_name")}
               </label>
               <input
                 type="text"
-                placeholder="Driver full name"
+                placeholder={t("drf_name_ph")}
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 className={`form-input ${errors.fullName ? "form-input--error" : ""}`}
@@ -146,7 +151,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
 
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                Email Address *
+                {t("drf_email")}
               </label>
               <input
                 type="email"
@@ -163,11 +168,11 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                Mobile Phone *
+                {t("drf_phone")}
               </label>
               <input
                 type="tel"
-                placeholder="0400 000 000"
+                placeholder={t("drf_phone_ph")}
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 className={`form-input ${errors.phone ? "form-input--error" : ""}`}
@@ -178,18 +183,18 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
 
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                Depot Hub
+                {t("drf_depot")}
               </label>
               <select
                 value={formData.depotLocation}
                 onChange={(e) => setFormData({ ...formData, depotLocation: e.target.value })}
                 style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.85rem" }}
               >
-                <option value="Melbourne Hub">Melbourne Hub</option>
-                <option value="Sydney Hub">Sydney Hub</option>
-                <option value="Brisbane Hub">Brisbane Hub</option>
-                <option value="Adelaide Hub">Adelaide Hub</option>
-                <option value="Perth Hub">Perth Hub</option>
+                <option value="Melbourne Hub">{t("drf_depot_melbourne")}</option>
+                <option value="Sydney Hub">{t("drf_depot_sydney")}</option>
+                <option value="Brisbane Hub">{t("drf_depot_brisbane")}</option>
+                <option value="Adelaide Hub">{t("drf_depot_adelaide")}</option>
+                <option value="Perth Hub">{t("drf_depot_perth")}</option>
               </select>
             </div>
           </div>
@@ -197,23 +202,23 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "12px" }}>
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                Licence Class
+                {t("drf_licence_class")}
               </label>
               <select
                 value={formData.licenceClass}
                 onChange={(e) => setFormData({ ...formData, licenceClass: e.target.value })}
                 style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.85rem" }}
               >
-                <option value="MC">MC - Multi-Combination</option>
-                <option value="HC">HC - Heavy Combination</option>
-                <option value="HR">HR - Heavy Rigid</option>
-                <option value="MR">MR - Medium Rigid</option>
+                <option value="MC">{t("drf_lc_mc")}</option>
+                <option value="HC">{t("drf_lc_hc")}</option>
+                <option value="HR">{t("drf_lc_hr")}</option>
+                <option value="MR">{t("drf_lc_mr")}</option>
               </select>
             </div>
 
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                State of Issue
+                {t("drf_state")}
               </label>
               <select
                 value={formData.issuingState}
@@ -233,25 +238,30 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
 
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                Licence Number
+                {t("drf_licence_number")}
               </label>
               <input
                 type="text"
-                placeholder="Licence #"
+                placeholder={t("drf_licence_ph")}
+                maxLength={8}
+                minLength={8}
                 value={formData.licenceNumber}
-                onChange={(e) => setFormData({ ...formData, licenceNumber: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, licenceNumber: e.target.value.toUpperCase() })}
+                className={errors.licenceNumber ? "form-input form-input--error" : "form-input"}
                 style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
               />
+              <span style={{ color: "#64748b", fontSize: "0.72rem" }}>Enter exactly 8 letters or numbers.</span>
+              {errors.licenceNumber && <span style={{ color: "#ef4444", fontSize: "0.75rem" }}>{errors.licenceNumber}</span>}
             </div>
           </div>
 
           <div style={{ marginBottom: "14px" }}>
             <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-              Address *
+              {t("drf_address")}
             </label>
             <input
               type="text"
-              placeholder="Residential address"
+              placeholder={t("drf_address_ph")}
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               className={`form-input ${errors.address ? "form-input--error" : ""}`}
@@ -263,11 +273,11 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
           {!isEditing && (
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
-                Initial Password *
+                {t("drf_password")}
               </label>
               <input
                 type="password"
-                placeholder="At least 8 characters"
+                placeholder={t("drf_password_ph")}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className={`form-input ${errors.password ? "form-input--error" : ""}`}
@@ -283,7 +293,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
               onClick={onClose}
               style={{ padding: "8px 16px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "transparent", cursor: "pointer" }}
             >
-              Cancel
+              {t("drf_cancel")}
             </button>
             <button
               type="submit"
@@ -301,11 +311,11 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
             >
               {isSubmitting || loading
                 ? isEditing
-                  ? "Updating Driver Profile..."
-                  : "Creating Driver Account..."
+                  ? t("drf_updating")
+                  : t("drf_creating")
                 : isEditing
-                ? "Update Driver Profile"
-                : "Create Driver Account"}
+                ? t("drf_update")
+                : t("drf_create")}
             </button>
           </div>
         </form>

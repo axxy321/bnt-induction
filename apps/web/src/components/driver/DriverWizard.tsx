@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Check } from "lucide-react";
 import { DriverBundle, DriverFormInput, DocumentType, QuizQuestion, QuizSubmitResult } from "../../types";
 import { Step1Profile } from "./Step1Profile";
@@ -13,7 +14,9 @@ interface DriverWizardProps {
   currentStep: number;
   onSetStep: (step: number) => void;
   onSaveProfile: (input: DriverFormInput) => Promise<any>;
-  onUploadDocument: (type: DocumentType, file: File) => Promise<any>;
+  onUploadDocument: (type: DocumentType, file: File, onProgress?: (progress: number) => void) => Promise<any>;
+  onCompleteStep2: () => Promise<void>;
+  onCompleteStep3: () => Promise<void>;
   onToggleModule: (module: any) => Promise<any>;
   onStartModule: (module: any) => Promise<any>;
   onSubmitQuiz: (answers: Record<number, number>) => Promise<QuizSubmitResult>;
@@ -24,21 +27,14 @@ interface DriverWizardProps {
   loading: boolean;
 }
 
-const stepLabels = [
-  "1. Profile Details",
-  "2. AU Documents",
-  "3. Safety Modules",
-  "4. Knowledge Quiz",
-  "5. Legal Sign-Off",
-  "6. Site Pass & Cert"
-];
-
 export function DriverWizard({
   bundle,
   currentStep,
   onSetStep,
   onSaveProfile,
   onUploadDocument,
+  onCompleteStep2,
+  onCompleteStep3,
   onToggleModule,
   onStartModule,
   onSubmitQuiz,
@@ -48,6 +44,15 @@ export function DriverWizard({
   quizQuestions,
   loading
 }: DriverWizardProps) {
+  const { t } = useTranslation();
+  const stepLabels = [
+    t("step_1"),
+    t("step_2"),
+    t("step_3"),
+    t("step_4"),
+    t("step_5"),
+    t("step_6")
+  ];
   const maxCompletedStep = bundle.progress?.completedStepIds?.length
     ? Math.max(...bundle.progress.completedStepIds)
     : 0;
@@ -55,9 +60,9 @@ export function DriverWizard({
   const progressPercent = Math.round((currentStep / 6) * 100);
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-6">
+    <div className="induction-wizard w-full max-w-5xl mx-auto space-y-6">
       {/* High-Tech Stepper Header */}
-      <div className="bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+      <div className="induction-stepper bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">
@@ -73,7 +78,7 @@ export function DriverWizard({
           <div className="flex items-center gap-3">
             <div className="text-right">
               <span className="text-xs text-slate-400 font-medium block">Progress</span>
-              <span className="text-emerald-400 font-extrabold font-mono text-sm">{progressPercent}% Complete</span>
+              <span className="text-emerald-400 font-extrabold font-mono text-sm">{progressPercent}% {t("progress_complete")}</span>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-white font-mono shadow-inner">
               {currentStep}/6
@@ -140,22 +145,29 @@ export function DriverWizard({
             />
           )}
 
-          {currentStep === 2 && (
-            <Step2Documents
-              documents={bundle.documents}
-              onUpload={onUploadDocument}
-              onContinue={() => onSetStep(3)}
-              loading={loading}
-            />
-          )}
-
+        {currentStep === 2 && (
+          <Step2Documents
+            documents={bundle.documents}
+            onUpload={onUploadDocument}
+            onContinue={async () => {
+              await onCompleteStep2();
+              onSetStep(3);
+            }}
+            loading={loading}
+          />
+        )}
           {currentStep === 3 && (
             <Step3Modules
               modules={bundle.learningProgress}
               onToggleModule={onToggleModule}
               onStartModule={onStartModule}
-              onContinue={() => onSetStep(4)}
+              onContinue={async () => {
+                await onCompleteStep3();
+                onSetStep(4);
+              }}
               loading={loading}
+              driverId={bundle.driver.id}
+              driverName={bundle.driver.fullName}
             />
           )}
 

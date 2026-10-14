@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
 import QRCode from "qrcode";
 import { DriverBundle } from "../../types";
@@ -16,23 +17,52 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
   driverBundle
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const driverQrRef = useRef<HTMLCanvasElement | null>(null);
+  const { t } = useTranslation();
 
   const driver = driverBundle.driver;
   const isCompleted = driverBundle.progress?.completedStepIds?.length === 6;
   const verificationCode = driverBundle.certificate?.verificationCode || `BNT-${driver.id.slice(0, 8).toUpperCase()}`;
-  const verifyUrl = `${window.location.origin}/#verify-${verificationCode}`;
-  const validUntilDate = new Date();
+  const verifyUrl = `${window.location.origin}/certificate/verify/${verificationCode}`;
+  const driverVerifyUrl = `${window.location.origin}/driver/verify/${driver.id}`;
+  
+  // Use completion date for expiry calculation (fixed date, not modal open date)
+  const completionDate = driverBundle.certificate?.issuedAt
+    ? new Date(driverBundle.certificate.issuedAt)
+    : (driverBundle.progress?.completedAt
+      ? new Date(driverBundle.progress.completedAt)
+      : new Date()); // fallback to today
+  
+  const validUntilDate = new Date(completionDate);
   validUntilDate.setFullYear(validUntilDate.getFullYear() + 1);
+  
   const expiryFormatted = validUntilDate.toLocaleDateString("en-AU", {
     day: "numeric",
     month: "short",
-    year: "numeric"
+    year: "numeric",
+    timeZone: "Australia/Melbourne"
   });
+  
+  // Calculate days remaining (use UTC to avoid timezone issues)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const validUntilUTC = new Date(Date.UTC(
+    validUntilDate.getFullYear(),
+    validUntilDate.getMonth(),
+    validUntilDate.getDate()
+  ));
+  const todayUTC = new Date(Date.UTC(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  ));
+  const diffMs = validUntilUTC.getTime() - todayUTC.getTime();
+  const daysUntilExpiry = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
   useEffect(() => {
     if (isOpen && canvasRef.current) {
       QRCode.toCanvas(canvasRef.current, verifyUrl, {
-        width: 160,
+        width: 112,
         margin: 1,
         color: {
           dark: "#0f172a",
@@ -42,7 +72,19 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
         console.error("Failed to render QR Code on canvas", err);
       });
     }
-  }, [isOpen, verifyUrl]);
+    if (isOpen && driverQrRef.current) {
+      QRCode.toCanvas(driverQrRef.current, driverVerifyUrl, {
+        width: 88,
+        margin: 1,
+        color: {
+          dark: "#0f172a",
+          light: "#ffffff"
+        }
+      }).catch((err) => {
+        console.error("Failed to render driver QR Code on canvas", err);
+      });
+    }
+  }, [isOpen, verifyUrl, driverVerifyUrl]);
 
   if (!isOpen) return null;
 
@@ -52,40 +94,40 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl max-w-md w-full overflow-hidden relative"
+          className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl max-w-xs w-full min-w-0 my-auto overflow-hidden relative"
         >
           {/* Top Bar Header */}
-          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-slate-900 p-5 text-white flex items-center justify-between relative">
+          <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-slate-900 p-4 text-white flex items-center justify-between relative">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center">
                 <Truck className="w-5 h-5 text-white" />
               </div>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-emerald-200">
-                  BNT Logistics Site Access
+                  {t("gp_site_access")}
                 </span>
-                <h3 className="text-lg font-black tracking-tight">Depot Gate Pass</h3>
+                <h3 className="text-lg font-black tracking-tight">{t("gp_title")}</h3>
               </div>
             </div>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 flex items-center justify-center transition-colors text-white"
-              aria-label="Close gate pass modal"
+              aria-label={t("gp_close")}
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Body Content */}
-          <div className="p-6 space-y-5">
+          <div className="p-5 space-y-4">
             {/* Status Pulse Banner */}
             <div
-              className={`p-3.5 rounded-2xl border flex items-center gap-3 ${
+              className={`p-3 rounded-2xl border flex items-center gap-3 ${
                 isCompleted
                   ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
                   : "bg-amber-500/10 border-amber-500/30 text-amber-300"
@@ -103,24 +145,24 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
               </div>
               <div>
                 <div className="text-xs font-black uppercase tracking-wider">
-                  {isCompleted ? "Access Authorised • Active" : "Induction Incomplete"}
+                  {isCompleted ? t("gp_active") : t("gp_incomplete")}
                 </div>
                 <div className="text-[11px] opacity-80">
                   {isCompleted
-                    ? "Verified for heavy vehicle depot gates & dock bays"
-                    : "Complete induction steps to unlock unrestricted site entry"}
+                    ? t("gp_active_desc")
+                    : t("gp_incomplete_desc")}
                 </div>
               </div>
             </div>
 
             {/* QR Code Container */}
-            <div className="flex flex-col items-center justify-center p-6 bg-slate-950 border border-slate-800 rounded-2xl shadow-inner space-y-3">
-              <div className="p-2 bg-white rounded-xl shadow-lg flex items-center justify-center">
-                <canvas ref={canvasRef} className="rounded-lg" />
+            <div className="flex flex-col items-center justify-center p-4 bg-slate-950 border border-slate-800 rounded-2xl shadow-inner space-y-2 max-w-full overflow-hidden">
+              <div className="p-2 bg-white rounded-xl shadow-lg flex items-center justify-center max-w-full overflow-hidden">
+                <canvas ref={canvasRef} className="rounded-lg max-w-full h-auto" />
               </div>
               <div className="text-center">
                 <span className="text-[10px] text-slate-500 uppercase tracking-widest font-mono block">
-                  Gate Scanner Verification Code
+                  {t("gp_scan_code")}
                 </span>
                 <span className="text-sm font-mono font-bold text-white tracking-wider">
                   {verificationCode}
@@ -128,30 +170,47 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
               </div>
             </div>
 
-            {/* Driver Particulars Grid */}
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-800">
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Driver Name</span>
-                <strong className="text-white text-sm block truncate">{driver.fullName || "Unassigned"}</strong>
+            {/* Driver ID QR Badge */}
+            <div className="flex flex-col items-center justify-center p-3 bg-slate-950 border border-slate-800 rounded-2xl shadow-inner space-y-1.5 max-w-full overflow-hidden">
+              <div className="p-2 bg-white rounded-xl shadow-lg flex items-center justify-center max-w-full overflow-hidden">
+                <canvas ref={driverQrRef} className="rounded-lg max-w-full h-auto" />
               </div>
-              <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-800">
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Licence Class</span>
-                <strong className="text-emerald-400 text-sm block font-mono">
-                  {driver.licenceClass || "HC Heavy Combination"}
+              <div className="text-center">
+                <span className="text-[10px] text-slate-500 uppercase tracking-widest font-mono block">
+                  {t("gp_driver_badge")}
+                </span>
+              </div>
+            </div>
+
+            {/* Driver Particulars Grid */}
+            <div className="grid grid-cols-2 gap-2 text-xs min-w-0">
+              <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-800 min-w-0">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">{t("gp_driver_name")}</span>
+                <strong className="text-white text-sm block truncate">{driver.fullName || t("gp_unassigned")}</strong>
+              </div>
+              <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-800 min-w-0">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">{t("gp_licence_class")}</span>
+                <strong className="text-emerald-400 text-sm block font-mono truncate">
+                  {driver.licenceClass || t("gp_hc_default")}
                 </strong>
               </div>
-              <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-800">
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Primary Terminal</span>
-                <div className="flex items-center gap-1 text-slate-200 mt-0.5">
+              <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-800 min-w-0">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">{t("gp_primary_terminal")}</span>
+                <div className="flex items-center gap-1 text-slate-200 mt-0.5 min-w-0">
                   <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="truncate">Melbourne Freight</span>
+                  <span className="truncate">{t("gp_melbourne_freight")}</span>
                 </div>
               </div>
-              <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-800">
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Valid Until</span>
-                <div className="flex items-center gap-1 text-slate-200 mt-0.5 font-mono">
+              <div className="bg-slate-800/60 p-2.5 rounded-xl border border-slate-800 min-w-0">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">{t("gp_valid_until")}</span>
+                <div className="flex items-center gap-1 text-slate-200 mt-0.5 font-mono min-w-0">
                   <Calendar className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span>{expiryFormatted}</span>
+                  <span className="truncate">{expiryFormatted}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-1 text-[10px] font-medium">
+                  <span className={daysUntilExpiry <= 30 ? "text-rose-400" : daysUntilExpiry <= 90 ? "text-amber-400" : "text-emerald-400"}>
+                    {t(daysUntilExpiry === 1 ? "gp_days_left_one" : "gp_days_left_other", { count: daysUntilExpiry })}
+                  </span>
                 </div>
               </div>
             </div>
@@ -160,7 +219,7 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
             <div className="pt-2 flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>HVNL Compliant</span>
+                <span>{t("gp_hvnl")}</span>
               </div>
               <button
                 type="button"
@@ -168,7 +227,7 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs flex items-center gap-2 border border-slate-700 transition-colors"
               >
                 <Printer className="w-3.5 h-3.5" />
-                Print / Save Pass
+                {t("gp_print")}
               </button>
             </div>
           </div>

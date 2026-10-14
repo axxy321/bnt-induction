@@ -11,6 +11,15 @@ interface Env {
   RESEND_FROM_EMAIL: string;
 }
 
+const DEFAULT_BRANDING = {
+  id: "default",
+  company_name: "BNT Logistics",
+  logo_path: null as string | null,
+  primary_color: "#1e3a5f",
+  welcome_text: "Welcome to the driver induction portal",
+  updated_at: null as string | null
+};
+
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
   const url = new URL(request.url);
@@ -28,6 +37,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         organizationName: env.ORGANIZATION_NAME,
         timestamp: new Date().toISOString()
       });
+    }
+
+    // --- Branding (public read, admin update) ---
+    if (cleanPath === "branding" && method === "GET") {
+      return handleGetBranding(env);
+    }
+    if (cleanPath === "branding" && method === "PUT") {
+      const adminId = await requireAdmin(request, env);
+      if (!adminId) return errorResponse("Admin access required.", 401);
+      return handleUpdateBranding(request, env, adminId);
     }
 
     // --- Public Registration Route ---
@@ -66,6 +85,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         return handleResetInduction(request, env, adminId, inductionResetMatch[1]);
       }
 
+      // Archive Driver
+      const archiveMatch = cleanPath.match(/^admin\/drivers\/([^/]+)\/archive$/);
+      if (archiveMatch && method === "POST") {
+        return handleArchiveDriver(request, env, adminId, archiveMatch[1]);
+      }
+
+      // Restore Driver
+      const restoreMatch = cleanPath.match(/^admin\/drivers\/([^/]+)\/restore$/);
+      if (restoreMatch && method === "POST") {
+        return handleRestoreDriver(request, env, adminId, restoreMatch[1]);
+      }
+
       // Delete Driver
       if (driverMatch && method === "DELETE") {
         return handleDeleteDriver(request, env, adminId, driverMatch[1]);
@@ -86,6 +117,83 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       if (docVerifyMatch && method === "POST") {
         return handleVerifyDocument(request, env, adminId, docVerifyMatch[1]);
       }
+
+      // --- Induction Schedules ---
+      // List schedules
+      if (cleanPath === "admin/schedules" && method === "GET") {
+        return handleGetSchedules(env, adminId);
+      }
+
+      // Create schedule
+      if (cleanPath === "admin/schedules" && method === "POST") {
+        return handleCreateSchedule(request, env, adminId);
+      }
+
+      // Get single schedule
+      const scheduleMatch = cleanPath.match(/^admin\/schedules\/([^/]+)$/);
+      if (scheduleMatch && method === "GET") {
+        return handleGetSchedule(env, adminId, scheduleMatch[1]);
+      }
+
+      // Update schedule
+      if (scheduleMatch && method === "PATCH") {
+        return handleUpdateSchedule(request, env, adminId, scheduleMatch[1]);
+      }
+
+      // Delete schedule
+      if (scheduleMatch && method === "DELETE") {
+        return handleDeleteSchedule(env, adminId, scheduleMatch[1]);
+      }
+
+      // Get schedule items
+      const scheduleItemsMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/items$/);
+      if (scheduleItemsMatch && method === "GET") {
+        return handleGetScheduleItems(env, adminId, scheduleItemsMatch[1]);
+      }
+
+      // Add schedule item
+      if (scheduleItemsMatch && method === "POST") {
+        return handleAddScheduleItem(request, env, adminId, scheduleItemsMatch[1]);
+      }
+
+      // Update schedule item
+      const scheduleItemMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/items\/([^/]+)$/);
+      if (scheduleItemMatch && method === "PATCH") {
+        return handleUpdateScheduleItem(request, env, adminId, scheduleItemMatch[1], scheduleItemMatch[2]);
+      }
+
+      // Delete schedule item
+      if (scheduleItemMatch && method === "DELETE") {
+        return handleDeleteScheduleItem(env, adminId, scheduleItemMatch[1], scheduleItemMatch[2]);
+      }
+
+      // Reorder schedule items
+      const scheduleReorderMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/items\/reorder$/);
+      if (scheduleReorderMatch && method === "POST") {
+        return handleReorderScheduleItems(request, env, adminId, scheduleReorderMatch[1]);
+      }
+
+      // Get schedule enrollments
+      if (cleanPath === "admin/schedules/enrollments" && method === "GET") {
+        return handleGetScheduleEnrollments(url, env, adminId);
+      }
+
+      // Enroll driver in schedule
+      const scheduleEnrollMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/enroll$/);
+      if (scheduleEnrollMatch && method === "POST") {
+        return handleEnrollDriverInSchedule(request, env, adminId, scheduleEnrollMatch[1]);
+      }
+
+      // Unenroll driver from schedule
+      const scheduleUnenrollMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/enroll\/([^/]+)$/);
+      if (scheduleUnenrollMatch && method === "DELETE") {
+        return handleUnenrollDriverFromSchedule(env, adminId, scheduleUnenrollMatch[1], scheduleUnenrollMatch[2]);
+      }
+
+      // Process schedule invitations (cron job)
+      if (cleanPath === "admin/schedules/process-invitations" && method === "POST") {
+        return handleProcessScheduleInvitations(env, adminId);
+      }
     }
 
     // --- Public Routes ---
@@ -94,6 +202,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const verifyMatch = cleanPath.match(/^certificate\/verify\/([^/]+)$/);
     if (verifyMatch && method === "GET") {
       return handleVerifyCertificate(verifyMatch[1], env, request);
+    }
+
+    // Verify Driver ID
+    const driverVerifyMatch = cleanPath.match(/^driver\/verify\/([^/]+)$/);
+    if (driverVerifyMatch && method === "GET") {
+      return handleVerifyDriver(driverVerifyMatch[1], env);
+    }
+
+    // Verify Vehicle Pass
+    const vehicleVerifyMatch = cleanPath.match(/^vehicle\/verify\/([^/]+)$/);
+    if (vehicleVerifyMatch && method === "GET") {
+      return handleVerifyVehiclePass(vehicleVerifyMatch[1], env);
     }
 
     // OCR is deliberately not exposed as a public service-role endpoint. Document
@@ -236,6 +356,54 @@ async function handleSelfRegisterDriver(request: Request, env: Env) {
 
   await logAuditEntry(supabase, userId, "driver_self_registered", { email: emailLower, depotCode: payload.depotCode });
   return jsonResponse({ message: "Registration successful. You can now log in.", email: emailLower });
+}
+
+// --- Branding (public read, admin update) ---
+
+async function handleGetBranding(env: Env): Promise<Response> {
+  const supabase = getSupabaseAdmin(env);
+  const { data, error } = await supabase
+    .from("branding")
+    .select("id, company_name, logo_path, primary_color, welcome_text, updated_at")
+    .eq("id", "default")
+    .maybeSingle();
+  if (error) throw error;
+  return jsonResponse({ branding: data ?? DEFAULT_BRANDING });
+}
+
+async function handleUpdateBranding(request: Request, env: Env, adminId: string): Promise<Response> {
+  const supabase = getSupabaseAdmin(env);
+  const schema = z.object({
+    company_name: z.string().min(1).max(100),
+    logo_path: z.string().max(500).nullable().optional(),
+    primary_color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, "Primary colour must be a hex value like #1e3a5f"),
+    welcome_text: z.string().max(500)
+  });
+  const payload = schema.parse(await request.json());
+
+  const { data: updated, error: updateError } = await supabase
+    .from("branding")
+    .upsert(
+      {
+        id: "default",
+        ...payload,
+        updated_by: adminId,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "id" }
+    )
+    .select("id, company_name, logo_path, primary_color, welcome_text, updated_at")
+    .maybeSingle();
+  if (updateError) throw updateError;
+
+  await logAuditEntry(supabase, adminId, "admin_branding_updated", {
+    companyName: payload.company_name,
+    hasLogo: Boolean(payload.logo_path)
+  });
+
+  return jsonResponse({ message: "Branding updated.", branding: updated });
 }
 
 // --- Route Handlers ---
@@ -399,6 +567,22 @@ async function handleDeleteDriver(request: Request, env: Env, adminId: string, d
   return jsonResponse({ message: "Driver deleted" });
 }
 
+async function handleArchiveDriver(request: Request, env: Env, adminId: string, driverId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { error } = await supabase.rpc("archive_user_by_admin", { target_user_id: driverId });
+  if (error) throw error;
+  await logAuditEntry(supabase, adminId, "admin_driver_archived", { driverId });
+  return jsonResponse({ message: "Driver archived" });
+}
+
+async function handleRestoreDriver(request: Request, env: Env, adminId: string, driverId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { error } = await supabase.rpc("restore_user_by_admin", { target_user_id: driverId });
+  if (error) throw error;
+  await logAuditEntry(supabase, adminId, "admin_driver_restored", { driverId });
+  return jsonResponse({ message: "Driver restored" });
+}
+
 async function handleExportReports(url: URL, env: Env, adminId: string) {
   const supabase = getSupabaseAdmin(env);
   const scope = url.searchParams.get("scope") || "drivers";
@@ -489,6 +673,105 @@ async function handleVerifyCertificate(code: string, env: Env, request: Request)
       issuedAt: cert.issued_at
     },
     driver: { fullName: profile?.full_name || "Unknown" }
+  });
+}
+
+async function handleVerifyVehiclePass(passCode: string, env: Env) {
+  const supabase = getSupabaseAdmin(env);
+
+  if (!passCode || !/^[A-Za-z0-9-]+$/.test(passCode)) {
+    return errorResponse("Invalid pass code.", 400);
+  }
+
+  const { data: vehicle, error: vehicleError } = await supabase
+    .from("driver_vehicles")
+    .select("*, profiles:user_id (full_name, email)")
+    .eq("qr_pass_code", passCode)
+    .maybeSingle();
+  if (vehicleError) throw vehicleError;
+  if (!vehicle) {
+    return errorResponse("Vehicle pass not found.", 404);
+  }
+
+  return jsonResponse({
+    verified: true,
+    organizationName: env.ORGANIZATION_NAME,
+    vehicle: {
+      passCode: vehicle.qr_pass_code,
+      rego: vehicle.rego,
+      makeModel: vehicle.make_model,
+      bodyType: vehicle.body_type ?? null,
+      branchName: vehicle.branch_name ?? null,
+      status: vehicle.status,
+      regoExpiryDate: vehicle.rego_expiry_date ?? null,
+      dgExpiryDate: vehicle.dg_expiry_date ?? null,
+      scbaServiceDueDate: vehicle.scba_service_due_date ?? null
+    },
+    driver: {
+      fullName: vehicle.profiles?.full_name ?? "",
+      email: vehicle.profiles?.email ?? ""
+    }
+  });
+}
+
+async function handleVerifyDriver(driverId: string, env: Env) {
+  const supabase = getSupabaseAdmin(env);
+
+  if (!driverId || !/^[A-Za-z0-9-]+$/.test(driverId)) {
+    return errorResponse("Invalid driver ID.", 400);
+  }
+
+  const driverSelect = "*, profiles:user_id (full_name, phone, licence_class)";
+
+  // The QR badge encodes the driver's user id; fall back to the drivers table id
+  let { data: driver, error } = await supabase
+    .from("drivers")
+    .select(driverSelect)
+    .eq("user_id", driverId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!driver) {
+    const byDriverId = await supabase
+      .from("drivers")
+      .select(driverSelect)
+      .eq("id", driverId)
+      .maybeSingle();
+    if (byDriverId.error) throw byDriverId.error;
+    driver = byDriverId.data;
+  }
+  if (!driver) {
+    return errorResponse("Driver not found.", 404);
+  }
+
+  // Induction progress and certificates link via profiles.user_id,
+  // so query them separately (no direct FK from drivers)
+  const { data: induction } = await supabase
+    .from("induction_progress")
+    .select("completed_at, current_step")
+    .eq("user_id", driver.user_id)
+    .maybeSingle();
+  const { data: certificate } = await supabase
+    .from("certificates")
+    .select("expires_at, issued_at")
+    .eq("user_id", driver.user_id)
+    .maybeSingle();
+
+  const profile = driver.profiles ?? {};
+  const completed = driver.status === "Completed" || induction?.completed_at != null;
+
+  return jsonResponse({
+    verified: true,
+    organizationName: env.ORGANIZATION_NAME,
+    driver: {
+      driverId: driver.id,
+      fullName: profile.full_name ?? "",
+      phone: profile.phone ?? "",
+      licenceClass: profile.licence_class ?? "",
+      inductionStatus: driver.status ?? "Not Started",
+      inductionCompleted: Boolean(completed),
+      completedAt: induction?.completed_at ?? null,
+      certificateExpiresAt: certificate?.expires_at ?? null
+    }
   });
 }
 
@@ -647,4 +930,246 @@ async function handleVerifyDocument(request: Request, env: Env, adminId: string,
   return jsonResponse({
     message: `Document ${action === "approve" ? "approved" : "rejected"} successfully.`
   });
+}
+
+// ============================================================
+// Induction Schedule Handlers
+// ============================================================
+
+async function handleGetSchedules(env: Env, adminId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { data, error } = await supabase
+    .from("induction_schedules")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return jsonResponse({ schedules: data ?? [] });
+}
+
+async function handleCreateSchedule(request: Request, env: Env, adminId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const schema = z.object({
+    name: z.string().min(1).max(200),
+    description: z.string().optional()
+  });
+  const payload = schema.parse(await request.json());
+
+  const { data, error } = await supabase
+    .from("induction_schedules")
+    .insert({
+      name: payload.name,
+      description: payload.description || '',
+      created_by: adminId
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "schedule_created", { scheduleId: data.id, name: payload.name });
+  return jsonResponse({ schedule: data }, 201);
+}
+
+async function handleGetSchedule(env: Env, adminId: string, scheduleId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { data, error } = await supabase
+    .from("induction_schedules")
+    .select("*")
+    .eq("id", scheduleId)
+    .single();
+  if (error) return errorResponse("Schedule not found.", 404);
+  return jsonResponse({ schedule: data });
+}
+
+async function handleUpdateSchedule(request: Request, env: Env, adminId: string, scheduleId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const schema = z.object({
+    name: z.string().min(1).max(200).optional(),
+    description: z.string().optional(),
+    is_active: z.boolean().optional()
+  });
+  const payload = schema.parse(await request.json());
+
+  const { data, error } = await supabase
+    .from("induction_schedules")
+    .update({ ...payload, updated_at: new Date().toISOString() })
+    .eq("id", scheduleId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "schedule_updated", { scheduleId, changes: payload });
+  return jsonResponse({ schedule: data });
+}
+
+async function handleDeleteSchedule(env: Env, adminId: string, scheduleId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { error } = await supabase.from("induction_schedules").delete().eq("id", scheduleId);
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "schedule_deleted", { scheduleId });
+  return jsonResponse({ message: "Schedule deleted." });
+}
+
+async function handleGetScheduleItems(env: Env, adminId: string, scheduleId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { data, error } = await supabase
+    .from("induction_schedule_items")
+    .select(`
+      *,
+      course:induction_courses(*)
+    `)
+    .eq("schedule_id", scheduleId)
+    .order("sequence_order", { ascending: true });
+  if (error) throw error;
+  return jsonResponse({ items: data ?? [] });
+}
+
+async function handleAddScheduleItem(request: Request, env: Env, adminId: string, scheduleId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const schema = z.object({
+    courseId: z.string().uuid(),
+    sequenceOrder: z.number().int().positive(),
+    delayDays: z.number().int().min(0).default(7),
+    delayType: z.enum(['after_completion', 'after_enrollment', 'fixed_date']).default('after_completion'),
+    fixedDate: z.string().datetime().optional().nullable(),
+    isRequired: z.boolean().default(true)
+  });
+  const payload = schema.parse(await request.json());
+
+  const { data, error } = await supabase
+    .from("induction_schedule_items")
+    .insert({
+      schedule_id: scheduleId,
+      course_id: payload.courseId,
+      sequence_order: payload.sequenceOrder,
+      delay_days: payload.delayDays,
+      delay_type: payload.delayType,
+      fixed_date: payload.fixedDate,
+      is_required: payload.isRequired
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "schedule_item_added", { scheduleId, itemId: data.id, courseId: payload.courseId });
+  return jsonResponse({ item: data }, 201);
+}
+
+async function handleUpdateScheduleItem(request: Request, env: Env, adminId: string, scheduleId: string, itemId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const schema = z.object({
+    sequenceOrder: z.number().int().positive().optional(),
+    delayDays: z.number().int().min(0).optional(),
+    delayType: z.enum(['after_completion', 'after_enrollment', 'fixed_date']).optional(),
+    fixedDate: z.string().datetime().optional().nullable(),
+    isRequired: z.boolean().optional()
+  });
+  const payload = schema.parse(await request.json());
+
+  const { data, error } = await supabase
+    .from("induction_schedule_items")
+    .update(payload)
+    .eq("id", itemId)
+    .eq("schedule_id", scheduleId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "schedule_item_updated", { scheduleId, itemId, changes: payload });
+  return jsonResponse({ item: data });
+}
+
+async function handleDeleteScheduleItem(env: Env, adminId: string, scheduleId: string, itemId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { error } = await supabase
+    .from("induction_schedule_items")
+    .delete()
+    .eq("id", itemId)
+    .eq("schedule_id", scheduleId);
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "schedule_item_deleted", { scheduleId, itemId });
+  return jsonResponse({ message: "Schedule item deleted." });
+}
+
+async function handleReorderScheduleItems(request: Request, env: Env, adminId: string, scheduleId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const schema = z.object({
+    itemOrders: z.array(z.object({ id: z.string().uuid(), sequenceOrder: z.number().int().positive() }))
+  });
+  const payload = schema.parse(await request.json());
+
+  for (const item of payload.itemOrders) {
+    const { error } = await supabase
+      .from("induction_schedule_items")
+      .update({ sequence_order: item.sequenceOrder })
+      .eq("id", item.id)
+      .eq("schedule_id", scheduleId);
+    if (error) throw error;
+  }
+
+  await logAuditEntry(supabase, adminId, "schedule_items_reordered", { scheduleId });
+  return jsonResponse({ message: "Schedule items reordered." });
+}
+
+async function handleGetScheduleEnrollments(url: URL, env: Env, adminId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const scheduleId = url.searchParams.get("schedule_id");
+
+  let query = supabase
+    .from("induction_schedule_enrollments")
+    .select(`
+      *,
+      driver:profiles(*),
+      schedule:induction_schedules(*)
+    `)
+    .order("enrolled_at", { ascending: false });
+
+  if (scheduleId) {
+    query = query.eq("schedule_id", scheduleId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return jsonResponse({ enrollments: data ?? [] });
+}
+
+async function handleEnrollDriverInSchedule(request: Request, env: Env, adminId: string, scheduleId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const schema = z.object({ driverId: z.string().uuid() });
+  const payload = schema.parse(await request.json());
+
+  const { data, error } = await supabase.rpc("enroll_driver_in_schedule", {
+    p_schedule_id: scheduleId,
+    p_driver_id: payload.driverId,
+    p_enrolled_by: adminId
+  });
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "driver_enrolled_in_schedule", { scheduleId, driverId: payload.driverId });
+  return jsonResponse({ enrollment: data }, 201);
+}
+
+async function handleUnenrollDriverFromSchedule(env: Env, adminId: string, scheduleId: string, enrollmentId: string) {
+  const supabase = getSupabaseAdmin(env);
+  const { error } = await supabase
+    .from("induction_schedule_enrollments")
+    .delete()
+    .eq("id", enrollmentId)
+    .eq("schedule_id", scheduleId);
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "driver_unenrolled_from_schedule", { scheduleId, enrollmentId });
+  return jsonResponse({ message: "Driver unenrolled from schedule." });
+}
+
+async function handleProcessScheduleInvitations(env: Env, adminId: string) {
+  const supabase = getSupabaseAdmin(env);
+
+  // Call the database function to process invitations
+  const { error } = await supabase.rpc("process_induction_schedule_invitations");
+  if (error) throw error;
+
+  await logAuditEntry(supabase, adminId, "schedule_invitations_processed", {});
+  return jsonResponse({ processed: 0 }); // The function doesn't return count, but we could enhance it
 }

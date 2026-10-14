@@ -1,58 +1,62 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ContractorCompanyRecord } from "../../types";
-import { Building2, Edit, Truck, User, ShieldCheck, CheckCircle2, AlertTriangle, UploadCloud, FileText, Check } from "lucide-react";
+import { tStatus } from "../../i18n";
+import { Building2, Edit, Truck, User, ShieldCheck, CheckCircle2, AlertTriangle, UploadCloud, FileText, Check, Loader2 } from "lucide-react";
+import { api } from "../../lib/api";
+import { computeContractorStatus, daysUntil, formatABNDisplay, validateABN } from "../../lib/contractorUtils";
 
 interface ContractorCompanyHubProps {
   contractor: ContractorCompanyRecord;
-  onUpdateContractor: (updated: ContractorCompanyRecord) => void;
+  onUpdateContractor: (updated: ContractorCompanyRecord) => void | Promise<void>;
+  userId?: string;
 }
 
-// ATO Official Australian Business Number (ABN) Algorithm Validator
-export function validateABN(rawAbn: string): { isValid: boolean; message: string } {
-  const digits = rawAbn.replace(/\s+/g, "");
-  if (!digits) {
-    return { isValid: false, message: "ABN is required" };
-  }
-  if (!/^\d{11}$/.test(digits)) {
-    return { isValid: false, message: "ABN must be exactly 11 numeric digits" };
-  }
-
-  const weights = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
-  let sum = (parseInt(digits[0], 10) - 1) * weights[0];
-  for (let i = 1; i < 11; i++) {
-    sum += parseInt(digits[i], 10) * weights[i];
-  }
-
-  const isValid = sum % 89 === 0;
-  return {
-    isValid,
-    message: isValid
-      ? "ABN checksum verified via Australian Business Register (ABR) standard"
-      : "Invalid ABN: checksum failed official ATO modulus 89 verification"
-  };
-}
-
-export function formatABNDisplay(rawAbn: string): string {
-  const digits = rawAbn.replace(/\s+/g, "").slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 5) return `${digits.slice(0, 2)} ${digits.slice(2)}`;
-  if (digits.length <= 8) return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5)}`;
-  return `${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8, 11)}`;
-}
+const STATUS_BADGE_STYLES: Record<string, string> = {
+  green: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30",
+  amber: "bg-amber-500/10 text-amber-400 border border-amber-500/30",
+  red: "bg-rose-500/10 text-rose-400 border border-rose-500/30",
+  grey: "bg-slate-500/10 text-slate-400 border border-slate-500/30"
+};
 
 export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
   contractor,
   onUpdateContractor,
+  userId,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<ContractorCompanyRecord>(contractor);
   const [saveMessage, setSaveMessage] = useState("");
   const [abnValidation, setAbnValidation] = useState(() => validateABN(contractor.abn));
+  const [saving, setSaving] = useState(false);
+  const { t } = useTranslation();
+
+  const abnMsg = (msg: string) =>
+    msg.startsWith("ABN checksum")
+      ? t("cnt_abn_verified")
+      : msg.startsWith("Invalid ABN")
+      ? t("cnt_abn_invalid")
+      : msg.startsWith("ABN must")
+      ? t("cnt_abn_digits")
+      : t("cnt_abn_required");
+
+  const tierLabel = (tier: string) =>
+    tier === "Basic Fatigue"
+      ? t("cnt_tier_bfm")
+      : tier === "Mass Management"
+      ? t("cnt_tier_mass")
+      : tier === "Maintenance Management"
+      ? t("cnt_tier_maint")
+      : tier === "None"
+      ? t("cnt_tier_none")
+      : tier;
 
   // Insurance upload state
   const [uploadingPolicy, setUploadingPolicy] = useState<string | null>(null);
-  const [publicLiabilityFile, setPublicLiabilityFile] = useState<string | null>(null);
-  const [workersCompFile, setWorkersCompFile] = useState<string | null>(null);
+
+  const contractorStatus = computeContractorStatus(contractor);
+  const plDays = daysUntil(contractor.publicLiabilityExpiry);
+  const wcDays = daysUntil(contractor.workersCompExpiry);
 
   const handleAbnChange = (val: string) => {
     const formatted = formatABNDisplay(val);
@@ -60,30 +64,92 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
     setAbnValidation(validateABN(formatted));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!abnValidation.isValid) {
-      alert("Please provide a valid 11-digit Australian Business Number (ABN).");
+      alert(t("cnt_abn_required_alert"));
       return;
     }
-    onUpdateContractor(formData);
-    setIsEditing(false);
-    setSaveMessage("Contractor profile, ABN & NHVAS details updated successfully.");
-    setTimeout(() => setSaveMessage(""), 4000);
+    setSaving(true);
+    try {
+      await onUpdateContractor(formData);
+      setIsEditing(false);
+      setSaveMessage(t("cnt_saved"));
+      setTimeout(() => setSaveMessage(""), 4000);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSimulatedFileUpload = (type: "publicLiability" | "workersComp", file: File) => {
+  // Upload a real insurance/accreditation document to cloud storage.
+  // The upload is saved immediately so it survives even if the form is closed.
+  const handlePolicyUpload = async (type: "publicLiability" | "workersComp", file: File) => {
     setUploadingPolicy(type);
-    setTimeout(() => {
-      if (type === "publicLiability") {
-        setPublicLiabilityFile(file.name);
-      } else {
-        setWorkersCompFile(file.name);
+    try {
+      if (!userId) {
+        alert(t("cnt_login_upload"));
+        return;
       }
-      setUploadingPolicy(null);
-      setSaveMessage(`Uploaded ${file.name} successfully.`);
+      const url = await api.uploadContractorDocument(userId, type, file);
+      const updated = {
+        ...formData,
+        ...(type === "publicLiability"
+          ? { publicLiabilityFileUrl: url }
+          : { workersCompFileUrl: url })
+      };
+      setFormData(updated);
+      await onUpdateContractor(updated);
+      setSaveMessage(t("cnt_uploaded", { name: file.name }));
       setTimeout(() => setSaveMessage(""), 3500);
-    }, 1000);
+    } catch {
+      alert(t("cnt_upload_failed"));
+    } finally {
+      setUploadingPolicy(null);
+    }
+  };
+
+  // Warning line under a policy when its expiry date is passed or near.
+  const policyWarning = (days: number | null) => {
+    if (days === null) return null;
+    if (days < 0) {
+      return (
+        <div className="text-[11px] text-rose-400 flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          {t(Math.abs(days) === 1 ? "cnt_expired_ago_one" : "cnt_expired_ago_other", { count: Math.abs(days) })}
+        </div>
+      );
+    }
+    if (days <= 30) {
+      return (
+        <div className="text-[11px] text-amber-400 flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3 shrink-0" />
+          {t(days === 1 ? "cnt_expires_in_one" : "cnt_expires_in_other", { count: days })}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const policyStateBadge = (days: number | null) => {
+    if (days !== null && days < 0) {
+      return (
+        <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">
+          {tStatus("Expired", t)}
+        </span>
+      );
+    }
+    if (days !== null && days <= 30) {
+      return (
+        <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+          {tStatus("Expiring Soon", t)}
+        </span>
+      );
+    }
+    return (
+      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+        {tStatus("Active", t)}
+      </span>
+    );
   };
 
   return (
@@ -95,21 +161,13 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
           <div>
             <div className="flex items-center gap-3 mb-1">
               <Building2 className="w-6 h-6 text-indigo-400" />
-              <h2 className="text-2xl font-black text-white tracking-tight">Contractor Company & Accreditation Profile</h2>
-              <span
-                className={`px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                  contractor.status === "Compliant"
-                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                    : contractor.status === "Pending Review"
-                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
-                    : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
-                }`}
-              >
-                ● {contractor.status}
+              <h2 className="text-2xl font-black text-white tracking-tight">{t("cnt_title")}</h2>
+              <span className={`px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${STATUS_BADGE_STYLES[contractorStatus.tone]}`}>
+                ● {tStatus(contractorStatus.label, t)}
               </span>
             </div>
             <p className="text-slate-400 text-sm">
-              BNT Logistics • ABN & NHVAS Mass/Fatigue Compliance Vault
+              {t("cnt_sub")}
             </p>
           </div>
 
@@ -119,7 +177,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-lg flex items-center gap-2"
             >
               <Edit className="w-4 h-4" />
-              <span>{isEditing ? "Cancel Editing" : "Edit Company Profile"}</span>
+              <span>{isEditing ? t("cnt_cancel_edit") : t("cnt_edit")}</span>
             </button>
           </div>
         </div>
@@ -127,7 +185,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
 
       {saveMessage && (
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-semibold flex items-center gap-2 animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {saveMessage}
+          <CheckCircle2 className="w-4 h-4" /> {saveMessage}
         </div>
       )}
 
@@ -138,34 +196,36 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
               <Truck className="w-5 h-5 text-indigo-400" />
-              <h3 className="text-base font-bold text-white">Company Identity</h3>
+              <h3 className="text-base font-bold text-white">{t("cnt_card1")}</h3>
             </div>
 
             <div className="space-y-3 text-sm">
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Legal Company Name</span>
-                <span className="text-white font-bold">{contractor.companyName}</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_legal_name")}</span>
+                <span className="text-white font-bold">{contractor.companyName || "—"}</span>
               </div>
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Trading Name / Brand</span>
-                <span className="text-slate-200">{contractor.tradingName}</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_trading_name")}</span>
+                <span className="text-slate-200">{contractor.tradingName || "—"}</span>
               </div>
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Australian Business Number (ABN)</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_abn")}</span>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="font-mono text-emerald-400 font-bold">{contractor.abn}</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    <Check className="w-3 h-3" /> ABR Verified
-                  </span>
+                  <span className="font-mono text-emerald-400 font-bold">{contractor.abn || "—"}</span>
+                  {contractor.abn && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      <Check className="w-3 h-3" /> {t("cnt_abr_verified")}
+                    </span>
+                  )}
                 </div>
               </div>
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Primary Operating Depot</span>
-                <span className="text-slate-200">{contractor.primaryDepot}</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_primary_depot")}</span>
+                <span className="text-slate-200">{contractor.primaryDepot || "—"}</span>
               </div>
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Depot Address</span>
-                <span className="text-slate-300 text-xs">{contractor.address}</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_depot_address")}</span>
+                <span className="text-slate-300 text-xs">{contractor.address || "—"}</span>
               </div>
             </div>
           </div>
@@ -174,26 +234,26 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
               <User className="w-5 h-5 text-indigo-400" />
-              <h3 className="text-base font-bold text-white">Nominated Contact Person</h3>
+              <h3 className="text-base font-bold text-white">{t("cnt_card2")}</h3>
             </div>
 
             <div className="space-y-3 text-sm">
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Authorized Safety Representative</span>
-                <span className="text-white font-bold">{contractor.contactPerson}</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_auth_rep")}</span>
+                <span className="text-white font-bold">{contractor.contactPerson || "—"}</span>
               </div>
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Email Address</span>
-                <span className="text-indigo-400 font-mono text-xs">{contractor.email}</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_email")}</span>
+                <span className="text-indigo-400 font-mono text-xs">{contractor.email || "—"}</span>
               </div>
               <div>
-                <span className="text-slate-400 text-xs block font-medium">Direct Phone / Hotline</span>
-                <span className="text-slate-200 font-mono text-xs">{contractor.phone}</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_phone")}</span>
+                <span className="text-slate-200 font-mono text-xs">{contractor.phone || "—"}</span>
               </div>
               <div>
-                <span className="text-slate-400 text-xs block font-medium">NHVAS Fatigue Accreditation</span>
+                <span className="text-slate-400 text-xs block font-medium">{t("cnt_nhvas_accred")}</span>
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-500/10 text-indigo-400 text-xs font-bold border border-indigo-500/30 mt-1">
-                  <ShieldCheck className="w-3.5 h-3.5" /> {contractor.nhvasAccreditation} ({contractor.nhvasNumber})
+                  <ShieldCheck className="w-3.5 h-3.5" /> {tierLabel(contractor.nhvasAccreditation)} ({contractor.nhvasNumber || "—"})
                 </span>
               </div>
             </div>
@@ -203,39 +263,60 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
               <ShieldCheck className="w-5 h-5 text-indigo-400" />
-              <h3 className="text-base font-bold text-white">Insurance & Policy Verification</h3>
+              <h3 className="text-base font-bold text-white">{t("cnt_card3")}</h3>
             </div>
 
             <div className="space-y-4 text-sm">
               {/* Public Liability */}
               <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">Public Liability ($20M)</span>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                    Active
-                  </span>
+                   <span className="text-xs font-bold text-white">{t("cnt_pl")}</span>
+                  {policyStateBadge(plDays)}
                 </div>
-                <div className="text-xs text-slate-300 font-mono">Policy: {contractor.publicLiabilityPolicy}</div>
-                <div className="text-[11px] text-slate-400">Expires: <strong className="text-emerald-400">{contractor.publicLiabilityExpiry}</strong></div>
+                 <div className="text-xs text-slate-300 font-mono">{t("cnt_policy", { policy: contractor.publicLiabilityPolicy || "—" })}</div>
+                 <div className="text-[11px] text-slate-400">
+                   {t("cnt_expires")}{" "}
+                   <strong className={plDays !== null && plDays < 0 ? "text-rose-400" : "text-emerald-400"}>
+                     {contractor.publicLiabilityExpiry || "—"}
+                   </strong>
+                 </div>
+                {policyWarning(plDays)}
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-700/40">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-300 truncate max-w-[180px]">
-                    <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span className="truncate font-mono text-[11px]">
-                      {publicLiabilityFile || "No document uploaded"}
-                    </span>
-                  </div>
+                   {contractor.publicLiabilityFileUrl ? (
+                     <a
+                       href={contractor.publicLiabilityFileUrl}
+                       target="_blank"
+                       rel="noreferrer"
+                       className="flex items-center gap-1.5 text-xs text-indigo-400 truncate max-w-[180px] hover:text-indigo-300"
+                     >
+                       <FileText className="w-3.5 h-3.5 shrink-0" />
+                       <span className="truncate font-mono text-[11px]">{t("cnt_view_doc")}</span>
+                     </a>
+                   ) : (
+                     <div className="flex items-center gap-1.5 text-xs text-slate-300 truncate max-w-[180px]">
+                       <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                       <span className="truncate font-mono text-[11px]">{t("cnt_no_doc")}</span>
+                     </div>
+                   )}
                   <label className="cursor-pointer px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-bold transition-all flex items-center gap-1">
-                    <UploadCloud className="w-3 h-3" /> {publicLiabilityFile ? "Replace" : "Upload"}
-                    <input
-                      type="file"
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleSimulatedFileUpload("publicLiability", f);
-                      }}
-                    />
+                    {uploadingPolicy === "publicLiability" ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-3 h-3" />
+                    )}
+                     {contractor.publicLiabilityFileUrl ? t("cnt_replace") : t("cnt_upload")}
+                     <input
+                       type="file"
+                       accept=".pdf,.png,.jpg,.jpeg"
+                       className="hidden"
+                       disabled={uploadingPolicy !== null || !userId}
+                       onChange={(e) => {
+                         const f = e.target.files?.[0];
+                         if (f) handlePolicyUpload("publicLiability", f);
+                         e.target.value = "";
+                       }}
+                     />
                   </label>
                 </div>
               </div>
@@ -243,30 +324,51 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               {/* Workers Comp */}
               <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">Workers Compensation</span>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                    Active
-                  </span>
+                   <span className="text-xs font-bold text-white">{t("cnt_wc")}</span>
+                  {policyStateBadge(wcDays)}
                 </div>
-                <div className="text-xs text-slate-300 font-mono">Policy: {contractor.workersCompPolicy || "—"}</div>
-                <div className="text-[11px] text-slate-400">Expires: <strong className="text-emerald-400">{contractor.workersCompExpiry || "—"}</strong></div>
+                 <div className="text-xs text-slate-300 font-mono">{t("cnt_policy", { policy: contractor.workersCompPolicy || "—" })}</div>
+                 <div className="text-[11px] text-slate-400">
+                   {t("cnt_expires")}{" "}
+                   <strong className={wcDays !== null && wcDays < 0 ? "text-rose-400" : "text-emerald-400"}>
+                     {contractor.workersCompExpiry || "—"}
+                   </strong>
+                 </div>
+                {policyWarning(wcDays)}
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-700/40">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-300 truncate max-w-[180px]">
-                    <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span className="truncate font-mono text-[11px]">
-                      {workersCompFile || "No document uploaded"}
-                    </span>
-                  </div>
+                   {contractor.workersCompFileUrl ? (
+                     <a
+                       href={contractor.workersCompFileUrl}
+                       target="_blank"
+                       rel="noreferrer"
+                       className="flex items-center gap-1.5 text-xs text-indigo-400 truncate max-w-[180px] hover:text-indigo-300"
+                     >
+                       <FileText className="w-3.5 h-3.5 shrink-0" />
+                       <span className="truncate font-mono text-[11px]">{t("cnt_view_doc")}</span>
+                     </a>
+                   ) : (
+                     <div className="flex items-center gap-1.5 text-xs text-slate-300 truncate max-w-[180px]">
+                       <FileText className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                       <span className="truncate font-mono text-[11px]">{t("cnt_no_doc")}</span>
+                     </div>
+                   )}
                   <label className="cursor-pointer px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-bold transition-all flex items-center gap-1">
-                    <UploadCloud className="w-3 h-3" /> {workersCompFile ? "Replace" : "Upload"}
+                    {uploadingPolicy === "workersComp" ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <UploadCloud className="w-3 h-3" />
+                    )}
+                     {contractor.workersCompFileUrl ? t("cnt_replace") : t("cnt_upload")}
                     <input
                       type="file"
                       accept=".pdf,.png,.jpg,.jpeg"
                       className="hidden"
+                      disabled={uploadingPolicy !== null || !userId}
                       onChange={(e) => {
                         const f = e.target.files?.[0];
-                        if (f) handleSimulatedFileUpload("workersComp", f);
+                        if (f) handlePolicyUpload("workersComp", f);
+                        e.target.value = "";
                       }}
                     />
                   </label>
@@ -278,11 +380,11 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
       ) : (
         /* Form Edit Mode */
         <form onSubmit={handleSave} className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-          <h3 className="text-lg font-bold text-white border-b border-slate-800 pb-3">Edit Contractor Company Details</h3>
+          <h3 className="text-lg font-bold text-white border-b border-slate-800 pb-3">{t("cnt_edit_form_title")}</h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="contractor-companyName" className="block text-xs font-bold text-slate-300 mb-1">Company Legal Name</label>
+               <label htmlFor="contractor-companyName" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_company")}</label>
               <input
                 id="contractor-companyName"
                 name="companyName"
@@ -294,7 +396,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               />
             </div>
             <div>
-              <label htmlFor="contractor-tradingName" className="block text-xs font-bold text-slate-300 mb-1">Trading Name</label>
+               <label htmlFor="contractor-tradingName" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_trading")}</label>
               <input
                 id="contractor-tradingName"
                 name="tradingName"
@@ -307,7 +409,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
             </div>
             <div>
               <label htmlFor="contractor-abn" className="block text-xs font-bold text-slate-300 mb-1">
-                ABN (Australian Business Number)
+                 {t("cnt_field_abn")}
               </label>
               <input
                 id="contractor-abn"
@@ -315,7 +417,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
                 type="text"
                 value={formData.abn}
                 onChange={(e) => handleAbnChange(e.target.value)}
-                placeholder="11 numeric digits"
+                 placeholder={t("cnt_abn_ph")}
                 className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border text-white text-sm font-mono focus:outline-none ${
                   abnValidation.isValid
                     ? "border-emerald-500/60 focus:border-emerald-500"
@@ -325,18 +427,18 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               />
               <div className="mt-1 flex items-center gap-1.5 text-[11px]">
                 {abnValidation.isValid ? (
-                  <span className="text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {abnValidation.message}
-                  </span>
-                ) : (
-                  <span className="text-rose-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> {abnValidation.message}
+                   <span className="text-emerald-400 flex items-center gap-1">
+                     <CheckCircle2 className="w-3 h-3" /> {abnMsg(abnValidation.message)}
+                   </span>
+                 ) : (
+                   <span className="text-rose-400 flex items-center gap-1">
+                     <AlertTriangle className="w-3 h-3" /> {abnMsg(abnValidation.message)}
                   </span>
                 )}
               </div>
             </div>
             <div>
-              <label htmlFor="contractor-contactPerson" className="block text-xs font-bold text-slate-300 mb-1">Contact Person</label>
+               <label htmlFor="contractor-contactPerson" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_contact")}</label>
               <input
                 id="contractor-contactPerson"
                 name="contactPerson"
@@ -348,7 +450,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               />
             </div>
             <div>
-              <label htmlFor="contractor-email" className="block text-xs font-bold text-slate-300 mb-1">Contact Email</label>
+               <label htmlFor="contractor-email" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_email")}</label>
               <input
                 id="contractor-email"
                 name="email"
@@ -360,7 +462,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               />
             </div>
             <div>
-              <label htmlFor="contractor-phone" className="block text-xs font-bold text-slate-300 mb-1">Contact Phone</label>
+               <label htmlFor="contractor-phone" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_phone")}</label>
               <input
                 id="contractor-phone"
                 name="phone"
@@ -372,7 +474,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               />
             </div>
             <div>
-              <label htmlFor="contractor-nhvasAccreditation" className="block text-xs font-bold text-slate-300 mb-1">NHVAS Accreditation Tier</label>
+               <label htmlFor="contractor-nhvasAccreditation" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_tier")}</label>
               <select
                 id="contractor-nhvasAccreditation"
                 name="nhvasAccreditation"
@@ -380,14 +482,14 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
                 onChange={(e) => setFormData({ ...formData, nhvasAccreditation: e.target.value as any })}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
               >
-                <option value="Basic Fatigue">Basic Fatigue Management (BFM)</option>
-                <option value="Mass Management">Mass Management Accreditation</option>
-                <option value="Maintenance Management">Maintenance Management Accreditation</option>
-                <option value="None">None</option>
+                 <option value="Basic Fatigue">{t("cnt_tier_bfm")}</option>
+                 <option value="Mass Management">{t("cnt_tier_mass")}</option>
+                 <option value="Maintenance Management">{t("cnt_tier_maint")}</option>
+                 <option value="None">{t("cnt_tier_none")}</option>
               </select>
             </div>
             <div>
-              <label htmlFor="contractor-nhvasNumber" className="block text-xs font-bold text-slate-300 mb-1">NHVAS Registration Number</label>
+               <label htmlFor="contractor-nhvasNumber" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_nhvas_num")}</label>
               <input
                 id="contractor-nhvasNumber"
                 name="nhvasNumber"
@@ -398,7 +500,7 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               />
             </div>
             <div className="md:col-span-2">
-              <label htmlFor="contractor-primaryDepot" className="block text-xs font-bold text-slate-300 mb-1">Primary Depot Location</label>
+               <label htmlFor="contractor-primaryDepot" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_depot")}</label>
               <input
                 id="contractor-primaryDepot"
                 name="primaryDepot"
@@ -409,6 +511,119 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
                 required
               />
             </div>
+            <div className="md:col-span-2">
+               <label htmlFor="contractor-address" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_address")}</label>
+              <input
+                id="contractor-address"
+                name="address"
+                type="text"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+               <label htmlFor="contractor-plPolicy" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_pl_policy")}</label>
+              <input
+                id="contractor-plPolicy"
+                name="publicLiabilityPolicy"
+                type="text"
+                value={formData.publicLiabilityPolicy}
+                onChange={(e) => setFormData({ ...formData, publicLiabilityPolicy: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+               <label htmlFor="contractor-plExpiry" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_pl_expiry")}</label>
+              <input
+                id="contractor-plExpiry"
+                name="publicLiabilityExpiry"
+                type="date"
+                value={formData.publicLiabilityExpiry || ""}
+                onChange={(e) => setFormData({ ...formData, publicLiabilityExpiry: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+               <label htmlFor="contractor-wcPolicy" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_wc_policy")}</label>
+              <input
+                id="contractor-wcPolicy"
+                name="workersCompPolicy"
+                type="text"
+                value={formData.workersCompPolicy}
+                onChange={(e) => setFormData({ ...formData, workersCompPolicy: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm font-mono focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+               <label htmlFor="contractor-wcExpiry" className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_field_wc_expiry")}</label>
+              <input
+                id="contractor-wcExpiry"
+                name="workersCompExpiry"
+                type="date"
+                value={formData.workersCompExpiry || ""}
+                onChange={(e) => setFormData({ ...formData, workersCompExpiry: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div className="md:col-span-2">
+               <label className="block text-xs font-bold text-slate-300 mb-1">{t("cnt_docs_label")}</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="cursor-pointer px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold hover:border-indigo-500 flex items-center gap-2">
+                  {uploadingPolicy === "publicLiability" ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />
+                  ) : (
+                    <UploadCloud className="w-4 h-4 text-indigo-400 shrink-0" />
+                  )}
+                   <span className="truncate">
+                     {uploadingPolicy === "publicLiability"
+                       ? t("cnt_uploading")
+                       : formData.publicLiabilityFileUrl
+                       ? t("cnt_replace_pl")
+                       : t("cnt_upload_pl")}
+                   </span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    disabled={uploadingPolicy !== null || !userId}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handlePolicyUpload("publicLiability", f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <label className="cursor-pointer px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-xs font-semibold hover:border-indigo-500 flex items-center gap-2">
+                  {uploadingPolicy === "workersComp" ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />
+                  ) : (
+                    <UploadCloud className="w-4 h-4 text-indigo-400 shrink-0" />
+                  )}
+                   <span className="truncate">
+                     {uploadingPolicy === "workersComp"
+                       ? t("cnt_uploading")
+                       : formData.workersCompFileUrl
+                       ? t("cnt_replace_wc")
+                       : t("cnt_upload_wc")}
+                   </span>
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    className="hidden"
+                    disabled={uploadingPolicy !== null || !userId}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handlePolicyUpload("workersComp", f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+               <p className="text-[11px] text-slate-500 mt-1">
+                 {t("cnt_docs_note")}
+               </p>
+            </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
@@ -417,13 +632,15 @@ export const ContractorCompanyHub: React.FC<ContractorCompanyHubProps> = ({
               onClick={() => setIsEditing(false)}
               className="px-5 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-bold"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg"
-            >
-              Save Profile Updates
+               {t("cnt_cancel")}
+             </button>
+             <button
+               type="submit"
+               disabled={saving}
+               className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg flex items-center gap-2"
+             >
+               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+               {saving ? t("cnt_saving") : t("cnt_save")}
             </button>
           </div>
         </form>

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import QRCode from "qrcode";
 import { VehicleRecord } from "../../types";
+import { tStatus } from "../../i18n";
 import { Truck, QrCode, Plus, CheckCircle2, AlertTriangle, Building2, Calendar, X } from "lucide-react";
 
 interface VehicleManagementHubProps {
@@ -28,6 +30,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
   const [regoExpiryDate, setRegoExpiryDate] = useState("2027-12-31");
   const [dgExpiryDate, setDgExpiryDate] = useState("2028-06-30");
   const [scbaServiceDueDate, setScbaServiceDueDate] = useState("2027-03-15");
+  const { t } = useTranslation();
 
   const handleCreateVehicle = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +43,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
       bodyType,
       branchName,
       driverNumber: driverNumber || `DRV-${rego.toUpperCase().slice(0, 4)}`,
-      driverName: driverName || "Driver",
+      driverName: driverName || t("common_driver"),
       regoExpiryDate,
       dgExpiryDate,
       scbaServiceDueDate,
@@ -63,13 +66,13 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-6 rounded-2xl shadow-xl backdrop-blur-xl">
         <div className="space-y-1">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold">
-            <Truck className="w-3.5 h-3.5" /> Vehicle & Site Access Management • BNT Logistics Standard
+            <Truck className="w-3.5 h-3.5" /> {t("vh_badge")}
           </div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">
-            Registered Heavy Vehicles & Site Access Passes ({vehicles.length})
+            {t("vh_title", { count: vehicles.length })}
           </h1>
           <p className="text-slate-400 text-sm">
-            Maintain vehicle registration details, DG compliance dates, eSCBA service logs, and digital QR site entry passes.
+            {t("vh_sub")}
           </p>
         </div>
 
@@ -77,7 +80,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
           onClick={() => setShowAddModal(true)}
           className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white text-xs font-bold transition-all shadow-lg shrink-0 flex items-center gap-1.5"
         >
-          <Plus className="w-4 h-4" /> Register New Vehicle
+          <Plus className="w-4 h-4" /> {t("vh_register")}
         </button>
       </div>
 
@@ -85,15 +88,15 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
       {vehicles.length === 0 ? (
         <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-12 text-center shadow-xl">
           <Truck className="w-10 h-10 text-slate-500 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-white mb-1">No Registered Vehicles Found</h3>
+          <h3 className="text-base font-bold text-white mb-1">{t("vh_empty_title")}</h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto mb-6">
-            You do not have any registered heavy vehicles or trailers linked to your account. Click below to add a vehicle and generate a site entry QR pass.
+            {t("vh_empty_sub")}
           </p>
           <button
             onClick={() => setShowAddModal(true)}
             className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-lg inline-flex items-center gap-2"
           >
-            <Plus className="w-4 h-4" /> Register New Vehicle
+            <Plus className="w-4 h-4" /> {t("vh_register")}
           </button>
         </div>
       ) : (
@@ -106,7 +109,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono font-extrabold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1 rounded-lg">
-                    REGO: {veh.rego}
+                     {t("vh_rego", { rego: veh.rego })}
                   </span>
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-bold ${
@@ -115,7 +118,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
                         : "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                     }`}
                   >
-                    {veh.status}
+                    {tStatus(veh.status, t)}
                   </span>
                 </div>
 
@@ -126,41 +129,41 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
 
                 <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-800 text-xs text-slate-300 space-y-2">
                   <div className="flex justify-between">
-                    <span>Branch / Location:</span>
+                    <span>{t("vh_branch")}</span>
                     <span className="font-medium text-white truncate max-w-[200px]">{veh.branchName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>REGO Expiry:</span>
+                    <span>{t("vh_rego_expiry")}</span>
                     <span className="font-mono text-emerald-400">{veh.regoExpiryDate}</span>
                   </div>
                   {veh.dgExpiryDate && (
                     <div className="flex justify-between">
-                      <span>DG Licence Expiry:</span>
+                      <span>{t("vh_dg_expiry")}</span>
                       <span className="font-mono text-amber-400">{veh.dgExpiryDate}</span>
                     </div>
                   )}
                   {veh.scbaServiceDueDate && (
                     <div className="flex justify-between">
-                      <span>eSCBA Service Due:</span>
+                      <span>{t("vh_scba_due")}</span>
                       <span className="font-mono text-blue-400">{veh.scbaServiceDueDate}</span>
                     </div>
                   )}
                   <div className="flex justify-between pt-1 border-t border-slate-800">
-                    <span>Vehicle Check Approved:</span>
+                    <span>{t("vh_check_approved")}</span>
                     <span className={veh.vehicleCheckApproved ? "text-emerald-400 font-bold" : "text-rose-400"}>
-                      {veh.vehicleCheckApproved ? "YES" : "NO"}
+                      {veh.vehicleCheckApproved ? t("vh_yes") : t("vh_no")}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-                <span className="text-[11px] text-slate-500">Pass Code: {veh.qrPassCode}</span>
+                <span className="text-[11px] text-slate-500">{t("vh_pass_code", { code: veh.qrPassCode })}</span>
                 <button
                   onClick={() => setSelectedPassVehicle(veh)}
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold transition-all"
                 >
-                  Digital Site Pass
+                  {t("vh_digital_pass")}
                 </button>
               </div>
             </div>
@@ -173,7 +176,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-slate-900 border border-amber-500/30 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-6">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h2 className="text-lg font-bold text-white">Register Heavy Vehicle</h2>
+              <h2 className="text-lg font-bold text-white">{t("vh_modal_title")}</h2>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white p-1">
                 <X className="w-5 h-5" />
               </button>
@@ -181,13 +184,13 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
 
             <form onSubmit={handleCreateVehicle} className="space-y-4">
               <div className="space-y-1">
-                <label htmlFor="veh-rego" className="text-xs font-semibold text-slate-300">Vehicle REGO Number *</label>
+                <label htmlFor="veh-rego" className="text-xs font-semibold text-slate-300">{t("vh_rego_label")}</label>
                 <input
                   id="veh-rego"
                   name="rego"
                   type="text"
                   required
-                  placeholder="e.g. BNT-9988"
+                  placeholder={t("vh_rego_ph")}
                   value={rego}
                   onChange={(e) => setRego(e.target.value)}
                   className="w-full px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-amber-500"
@@ -195,13 +198,13 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label htmlFor="veh-makeModel" className="text-xs font-semibold text-slate-300">Make & Model *</label>
+                <label htmlFor="veh-makeModel" className="text-xs font-semibold text-slate-300">{t("vh_make_label")}</label>
                 <input
                   id="veh-makeModel"
                   name="makeModel"
                   type="text"
                   required
-                  placeholder="e.g. Kenworth K200 Prime Mover"
+                  placeholder={t("vh_make_ph")}
                   value={makeModel}
                   onChange={(e) => setMakeModel(e.target.value)}
                   className="w-full px-4 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-amber-500"
@@ -210,7 +213,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label htmlFor="veh-regoExpiry" className="text-xs font-semibold text-slate-300">REGO Expiry Date</label>
+                   <label htmlFor="veh-regoExpiry" className="text-xs font-semibold text-slate-300">{t("vh_rego_date_label")}</label>
                   <input
                     id="veh-regoExpiry"
                     name="regoExpiryDate"
@@ -221,7 +224,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label htmlFor="veh-dgExpiry" className="text-xs font-semibold text-slate-300">DG Expiry Date</label>
+                   <label htmlFor="veh-dgExpiry" className="text-xs font-semibold text-slate-300">{t("vh_dg_date_label")}</label>
                   <input
                     id="veh-dgExpiry"
                     name="dgExpiryDate"
@@ -239,13 +242,13 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
                   onClick={() => setShowAddModal(false)}
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold"
                 >
-                  Cancel
+                  {t("vh_cancel")}
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-lg transition-all"
                 >
-                  Save & Activate Vehicle
+                  {t("vh_save")}
                 </button>
               </div>
             </form>
@@ -259,47 +262,50 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
           <div className="bg-slate-900 border border-amber-500/40 rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-6">
             <div className="space-y-1">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-extrabold uppercase tracking-wider">
-                ● Active Site Entry Pass
+                {t("vh_active_pass")}
               </div>
               <h2 className="text-xl font-extrabold text-white">{selectedPassVehicle.rego}</h2>
               <p className="text-xs text-slate-400">{selectedPassVehicle.makeModel}</p>
             </div>
 
-            {/* Offline Canvas QR Code Container */}
-            <div className="p-6 rounded-2xl bg-white flex flex-col items-center justify-center shadow-inner mx-auto max-w-[220px]">
-              <canvas
-                ref={(el) => {
-                  if (el && selectedPassVehicle) {
-                    QRCode.toCanvas(
-                      el,
-                      `https://compliance.bntlogistics.com.au/#verify-${selectedPassVehicle.qrPassCode}`,
-                      { width: 160, margin: 1, color: { dark: "#0f172a", light: "#ffffff" } },
-                      (err) => {
-                        if (err) console.error("QR render error", err);
-                      }
-                    );
-                  }
-                }}
-                className="w-40 h-40 rounded"
-              />
-              <span className="text-[10px] font-mono text-slate-800 font-bold mt-2 tracking-widest">
-                {selectedPassVehicle.qrPassCode}
-              </span>
-            </div>
+              {/* Offline Canvas QR Code Container */}
+              <div className="p-6 rounded-2xl bg-white flex flex-col items-center justify-center shadow-inner mx-auto max-w-[220px]">
+                <canvas
+                  ref={(el) => {
+                    if (el && selectedPassVehicle) {
+                      // Vehicle-specific verification page: the QR identifies
+                      // the truck, not the driver's induction certificate.
+                      const passUrl = `${window.location.origin}/vehicle/verify/${selectedPassVehicle.qrPassCode}`;
+                      QRCode.toCanvas(
+                        el,
+                        passUrl,
+                        { width: 160, margin: 1, color: { dark: "#0f172a", light: "#ffffff" } },
+                        (err) => {
+                          if (err) console.error("QR render error", err);
+                        }
+                      );
+                    }
+                  }}
+                  className="w-40 h-40 rounded"
+                />
+                <span className="text-[10px] font-mono text-slate-800 font-bold mt-2 tracking-widest">
+                  {selectedPassVehicle.qrPassCode}
+                </span>
+              </div>
 
             <div className="text-xs text-slate-300 space-y-1 bg-slate-800/60 p-3 rounded-xl text-left border border-slate-800">
               <div className="flex justify-between">
-                <span>Driver:</span>
+                <span>{t("vh_driver")}</span>
                 <span className="font-bold text-white">{selectedPassVehicle.driverName}</span>
               </div>
               <div className="flex justify-between">
-                <span>Branch:</span>
+                <span>{t("vh_branch_label")}</span>
                 <span className="text-slate-300 truncate max-w-[160px]">{selectedPassVehicle.branchName}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span>WHS Compliance:</span>
+                <span>{t("vh_whs")}</span>
                 <span className="text-emerald-400 font-bold inline-flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> VERIFIED
+                  <CheckCircle2 className="w-3.5 h-3.5" /> {t("vh_verified")}
                 </span>
               </div>
             </div>
@@ -308,7 +314,7 @@ export const VehicleManagementHub: React.FC<VehicleManagementHubProps> = ({
               onClick={() => setSelectedPassVehicle(null)}
               className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-colors"
             >
-              Close Pass
+              {t("vh_close_pass")}
             </button>
           </div>
         </div>

@@ -18,6 +18,7 @@
  */
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle } from "lucide-react";
 import { InductionVersion, DriverProfile } from "../types";
 
@@ -28,6 +29,7 @@ interface InductionVersionBannerProps {
 }
 
 export function InductionVersionBanner({ currentVersion, certificateVersionLabel }: InductionVersionBannerProps) {
+  const { t } = useTranslation();
   // H-4 FIX: isOutdated must compare the driver's certificate version label against the
   // current published version — NOT hasPendingVersion (which is true whenever an admin drafts
   // any new version, causing the banner to show to fully-compliant drivers incorrectly).
@@ -44,23 +46,21 @@ export function InductionVersionBanner({ currentVersion, certificateVersionLabel
       className="version-banner"
       role="alert"
       aria-live="polite"
-      aria-label="Induction version update notice"
+      aria-label={t("ivb_aria")}
     >
       <div className="version-banner__icon" aria-hidden="true">
         <AlertTriangle className="w-5 h-5 text-amber-400" />
       </div>
       <div className="version-banner__body">
         <strong className="version-banner__title">
-          Induction Update Required — Version {currentVersion.versionLabel}
+          {t("ivb_title", { version: currentVersion.versionLabel })}
         </strong>
         <p className="version-banner__message">
-          The induction content has been updated since you last completed it (your certificate was issued under
-          version {certificateVersionLabel}). You will need to re-complete the induction to maintain compliance.
-          Contact your manager or wait for an email notification with further instructions.
+          {t("ivb_message", { oldVersion: certificateVersionLabel })}
         </p>
         {currentVersion.revisionNotes && (
           <details className="version-banner__notes">
-            <summary>What changed in version {currentVersion.versionLabel}</summary>
+            <summary>{t("ivb_summary", { version: currentVersion.versionLabel })}</summary>
             <p>{currentVersion.revisionNotes}</p>
           </details>
         )}

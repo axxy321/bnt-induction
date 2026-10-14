@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { AdminDriverRow } from "../../types";
 import {
   CalendarClock,
@@ -31,6 +32,7 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
   drivers,
   onNotifyDriver
 }) => {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterUrgency, setFilterUrgency] = useState<string>("All");
   const [notifiedDrivers, setNotifiedDrivers] = useState<Set<string>>(new Set());
@@ -54,12 +56,12 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
 
             const docLabel =
               doc.type === "driver_license"
-                ? "Driver Licence"
+                ? t("exp_doc_licence")
                 : doc.type === "medical_certificate"
-                ? "Medical Assessment"
+                ? t("exp_doc_medical")
                 : doc.type === "dangerous_goods_license"
-                ? "Dangerous Goods Licence"
-                : "Compliance Document";
+                ? t("exp_doc_dg")
+                : t("exp_doc_compliance");
 
             items.push({
               driverId: driver.id,
@@ -88,7 +90,7 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
           driverId: driver.id,
           driverName: driver.fullName,
           driverEmail: driver.email,
-          docType: "Annual Induction Refresher",
+          docType: t("exp_doc_refresher"),
           expiryDateStr: new Date(refresherDueTime).toISOString().split("T")[0],
           daysRemaining: diffDays,
           urgency
@@ -117,16 +119,31 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
   const urgentCount = expiryItems.filter((i) => i.daysRemaining >= 0 && i.daysRemaining <= 14).length;
   const upcomingCount = expiryItems.filter((i) => i.daysRemaining > 14 && i.daysRemaining <= 30).length;
 
+  const filterLabels: Record<string, string> = {
+    All: t("exp_filter_all"),
+    ActionRequired: t("exp_filter_action"),
+    Expired: t("exp_filter_expired"),
+    "Urgent (< 14d)": t("exp_filter_urgent"),
+    "Upcoming (< 30d)": t("exp_filter_upcoming")
+  };
+
+  const urgencyLabels: Record<string, string> = {
+    Expired: t("exp_filter_expired"),
+    "Urgent (< 14d)": t("exp_filter_urgent"),
+    "Upcoming (< 30d)": t("exp_filter_upcoming"),
+    Valid: t("exp_valid")
+  };
+
   const handleSendReminder = (item: ExpiryItem) => {
     setNotifiedDrivers((prev) => new Set([...prev, `${item.driverId}_${item.docType}`]));
     if (onNotifyDriver) {
       onNotifyDriver(
         item.driverId,
         item.driverEmail,
-        `Attention: Your ${item.docType} is due for compliance renewal.`
+        t("exp_notify_msg", { doc: item.docType })
       );
     } else {
-      alert(`Automated renewal notification dispatched to ${item.driverEmail}`);
+      alert(t("exp_alert_sent", { email: item.driverEmail }));
     }
   };
 
@@ -139,7 +156,7 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
             <XCircle className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-slate-400 font-bold uppercase">Expired Documents</span>
+            <span className="text-xs text-slate-400 font-bold uppercase">{t("exp_expired_docs")}</span>
             <strong className="text-2xl font-black text-rose-400 block">{expiredCount}</strong>
           </div>
         </div>
@@ -149,7 +166,7 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
             <AlertTriangle className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-slate-400 font-bold uppercase">Urgent (&lt; 14 Days)</span>
+            <span className="text-xs text-slate-400 font-bold uppercase">{t("exp_urgent")}</span>
             <strong className="text-2xl font-black text-amber-400 block">{urgentCount}</strong>
           </div>
         </div>
@@ -159,7 +176,7 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
             <CalendarClock className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs text-slate-400 font-bold uppercase">Upcoming (&lt; 30 Days)</span>
+            <span className="text-xs text-slate-400 font-bold uppercase">{t("exp_upcoming")}</span>
             <strong className="text-2xl font-black text-blue-400 block">{upcomingCount}</strong>
           </div>
         </div>
@@ -168,13 +185,13 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
       {/* Filter and Search Controls */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:w-80">
-          <label htmlFor="expiry-search-input" className="sr-only">Search driver or document</label>
+          <label htmlFor="expiry-search-input" className="sr-only">{t("exp_search_label")}</label>
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             id="expiry-search-input"
             name="expirySearch"
             type="text"
-            placeholder="Search driver or document..."
+            placeholder={t("exp_search_ph")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             autoComplete="off"
@@ -194,7 +211,7 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
                   : "bg-slate-800 text-slate-400 hover:text-white"
               }`}
             >
-              {urg === "ActionRequired" ? "Action Required (≤ 30d)" : urg}
+              {filterLabels[urg] ?? urg}
             </button>
           ))}
         </div>
@@ -206,19 +223,19 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800">
               <tr>
-                <th className="p-3.5">Driver</th>
-                <th className="p-3.5">Requirement / Item</th>
-                <th className="p-3.5">Expiry Date</th>
-                <th className="p-3.5">Days Left</th>
-                <th className="p-3.5">Status</th>
-                <th className="p-3.5 text-right">Action</th>
+                <th className="p-3.5">{t("exp_th_driver")}</th>
+                <th className="p-3.5">{t("exp_th_item")}</th>
+                <th className="p-3.5">{t("exp_th_expiry")}</th>
+                <th className="p-3.5">{t("exp_th_days")}</th>
+                <th className="p-3.5">{t("exp_th_status")}</th>
+                <th className="p-3.5 text-right">{t("exp_th_action")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {filteredItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-slate-500 font-medium">
-                    No expiring compliance documents found for this filter.
+                    {t("exp_empty")}
                   </td>
                 </tr>
               ) : (
@@ -250,8 +267,8 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
                           }`}
                         >
                           {item.daysRemaining < 0
-                            ? `${Math.abs(item.daysRemaining)} days ago`
-                            : `${item.daysRemaining} days`}
+                            ? t(Math.abs(item.daysRemaining) === 1 ? "exp_days_ago_one" : "exp_days_ago_other", { count: Math.abs(item.daysRemaining) })
+                            : t(item.daysRemaining === 1 ? "exp_days_one" : "exp_days_other", { count: item.daysRemaining })}
                         </span>
                       </td>
                       <td className="p-3.5">
@@ -266,7 +283,7 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
                               : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
                           }`}
                         >
-                          {item.urgency}
+                          {urgencyLabels[item.urgency] ?? item.urgency}
                         </span>
                       </td>
                       <td className="p-3.5 text-right">
@@ -283,12 +300,12 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
                           {isNotified ? (
                             <>
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                              Alerted
+                              {t("exp_alerted")}
                             </>
                           ) : (
                             <>
                               <Send className="w-3.5 h-3.5" />
-                              Send Alert
+                              {t("exp_send_alert")}
                             </>
                           )}
                         </button>

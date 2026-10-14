@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Award, Download, Star, Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Award, Download, Star, Check, AlertTriangle } from "lucide-react";
 import { CertificateRecord, DriverFeedback, DriverProfile } from "../../types";
 import bntLogo from "../../assets/bnt-logistics-logo.png";
 
@@ -24,9 +25,12 @@ export function Step6Certificate({
   const [issuesText, setIssuesText] = useState(feedback?.issues || "");
   const [feedbackSaved, setFeedbackSaved] = useState(!!feedback);
   const [downloading, setDownloading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   const handleDownload = async () => {
     setDownloading(true);
+    setErrorMsg(null);
     try {
       const res = await onGenerateCertificate();
       if (res.pdfBase64) {
@@ -40,18 +44,27 @@ export function Step6Certificate({
         document.body.removeChild(link);
       }
     } catch (err) {
-      console.error("Certificate download error", err);
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : t("err_cert_download")
+      );
     } finally {
       setDownloading(false);
     }
   };
 
   const handleFeedbackSubmit = async () => {
+    setErrorMsg(null);
     try {
       await onSubmitFeedback({ clarityRating: rating, issues: issuesText });
       setFeedbackSaved(true);
     } catch (err) {
-      console.error("Feedback submit failed", err);
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : t("err_feedback")
+      );
     }
   };
 
@@ -61,11 +74,32 @@ export function Step6Certificate({
         <Award className="w-16 h-16 text-amber-400" />
       </div>
       <h3 style={{ fontSize: "1.6rem", fontWeight: 700, margin: "0 0 8px" }}>
-        Induction Successfully Completed!
+        {t("s6_title")}
       </h3>
       <p className="muted" style={{ margin: "0 0 24px", fontSize: "0.95rem" }}>
-        Congratulations, <strong>{driver.fullName}</strong>. You are certified for Heavy Vehicle operations under BNT Logistics safety standards.
+        {t("s6_congrats", { name: driver.fullName })}
       </p>
+
+      {errorMsg && (
+        <div
+          style={{
+            padding: "10px 14px",
+            borderRadius: "10px",
+            background: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid rgba(239, 68, 68, 0.25)",
+            color: "#ef4444",
+            marginBottom: "20px",
+            fontSize: "0.85rem",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
+          }}
+        >
+          <AlertTriangle style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <span>{errorMsg}</span>
+        </div>
+      )}
 
       {certificate && (
         <div
@@ -80,28 +114,84 @@ export function Step6Certificate({
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", paddingBottom: "12px", borderBottom: "1px solid var(--border, #cbd5e1)" }}>
             <img src={bntLogo} alt="BNT Logistics" style={{ height: "34px", objectFit: "contain" }} />
-            <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1e3a5f" }}>BNT LOGISTICS OFFICIAL COMPLIANCE CERTIFICATE</span>
+            <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1e3a5f" }}>{t("s6_official")}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "0.88rem" }}>
             <div>
-              <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>Verification Code:</span>
+              <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>{t("s6_verify_code")}</span>
               <strong style={{ fontFamily: "monospace", fontSize: "1rem", color: "#1e3a5f" }}>
                 {certificate.verificationCode}
               </strong>
             </div>
             <div>
-              <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>Issued Date:</span>
+              <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>{t("s6_issued")}</span>
               <strong>{new Date(certificate.issuedAt).toLocaleDateString("en-AU")}</strong>
             </div>
+            {certificate.expiresAt && (
+              <div>
+                <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>{t("s6_valid_until")}</span>
+                <strong>{new Date(certificate.expiresAt).toLocaleDateString("en-AU")}</strong>
+              </div>
+            )}
             <div>
-              <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>Licence Class & State:</span>
+              <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>{t("s6_licence")}</span>
               <strong>{driver.licenceClass || "HC"} ({driver.issuingState || "VIC"})</strong>
             </div>
             <div>
-              <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>Depot Hub:</span>
+                <span className="muted" style={{ display: "block", fontSize: "0.75rem" }}>{t("s6_depot")}</span>
               <strong>{driver.depotLocation || "Melbourne Hub"}</strong>
             </div>
           </div>
+
+          {certificate.expiresAt &&
+            (() => {
+              const daysLeft = Math.ceil(
+                (new Date(certificate.expiresAt).getTime() - Date.now()) / 86400000
+              );
+              return daysLeft <= 60 ? (
+                <p
+                  style={{
+                    margin: "14px 0 0",
+                    fontSize: "0.8rem",
+                    color: "#d97706",
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <AlertTriangle style={{ width: 15, height: 15, flexShrink: 0 }} />
+                    {t(daysLeft === 1 ? "s6_expires_one" : "s6_expires_other", { count: daysLeft })}
+                </p>
+              ) : null;
+            })()}
+
+          {certificate.verificationUrl && (
+            <div
+              style={{
+                marginTop: "16px",
+                paddingTop: "14px",
+                borderTop: "1px solid var(--border, #cbd5e1)"
+              }}
+            >
+              <span className="muted" style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px" }}>
+                {t("s6_verify_this")}
+              </span>
+              <a
+                href={certificate.verificationUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  color: "#2563eb",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  wordBreak: "break-all"
+                }}
+              >
+                {certificate.verificationUrl}
+              </a>
+            </div>
+          )}
         </div>
       )}
 
@@ -124,7 +214,7 @@ export function Step6Certificate({
         >
           <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
             <Download style={{ width: 18, height: 18 }} />
-            {downloading ? "Generating PDF Certificate..." : "Download Official PDF Certificate"}
+            {downloading ? t("s6_downloading") : t("s6_download")}
           </span>
         </button>
       </div>
@@ -138,20 +228,20 @@ export function Step6Certificate({
         }}
       >
         <h4 style={{ fontSize: "1.05rem", fontWeight: 700, margin: "0 0 6px" }}>
-          Driver Feedback & Training Rating
+          {t("s6_feedback_title")}
         </h4>
         <p className="muted" style={{ fontSize: "0.82rem", margin: "0 0 16px" }}>
-          Help us continuously improve our safety induction program.
+          {t("s6_feedback_sub")}
         </p>
 
         {feedbackSaved ? (
           <div style={{ padding: "10px 14px", borderRadius: "8px", background: "rgba(34, 197, 94, 0.1)", color: "#22c55e", fontSize: "0.85rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-            <Check className="w-4 h-4" /> Thank you! Your feedback has been submitted to the compliance team.
+            <Check className="w-4 h-4" /> {t("s6_thanks")}
           </div>
         ) : (
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
-              <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Training Clarity:</span>
+              <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("s6_clarity")}</span>
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
@@ -177,7 +267,7 @@ export function Step6Certificate({
 
             <div style={{ marginBottom: "14px" }}>
               <textarea
-                placeholder="Any suggestions or questions about site safety?"
+                placeholder={t("s6_suggest")}
                 rows={2}
                 value={issuesText}
                 onChange={(e) => setIssuesText(e.target.value)}
@@ -199,7 +289,7 @@ export function Step6Certificate({
                 cursor: "pointer"
               }}
             >
-              Submit Feedback
+              {t("s6_submit_feedback")}
             </button>
           </div>
         )}

@@ -1,13 +1,46 @@
 import React, { useState } from "react";
-import { ComplianceAudit, SOPItem } from "../../types";
-import { ClipboardCheck, GraduationCap, FileText, CheckCircle2, Clock, Play, MessageSquare, Award, X, ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { AuditAssignment, SOPItem } from "../../types";
+import { tStatus } from "../../i18n";
+import { ClipboardCheck, GraduationCap, Upload, CheckCircle2, AlertTriangle, X, Play } from "lucide-react";
 
 interface AuditAndSOPManagerProps {
-  audits: ComplianceAudit[];
+  audits: AuditAssignment[];
   sops: SOPItem[];
   activeTab: "audits" | "learning";
-  onCompleteAudit: (auditId: string) => void;
+  onCompleteAudit: (assignment: AuditAssignment, answers: Record<number, boolean>) => Promise<void>;
   onCompleteSOP: (sopId: string) => void;
+}
+
+function daysUntil(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${dateStr}T00:00:00`);
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
+function DueBadge({ date }: { date: string | null }) {
+  const { t } = useTranslation();
+  const days = daysUntil(date);
+  if (days === null) return null;
+  const label =
+    days < 0
+      ? t("status_overdue")
+      : days === 0
+      ? t("status_due_today")
+      : t(days === 1 ? "aud_d_left_one" : "aud_d_left_other", { count: days });
+  const cls =
+    days < 0 || days <= 7
+      ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+      : days <= 14
+      ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+      : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30";
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${cls}`} title={date || undefined}>
+      {label}
+    </span>
+  );
 }
 
 export const AuditAndSOPManager: React.FC<AuditAndSOPManagerProps> = ({
@@ -18,25 +51,46 @@ export const AuditAndSOPManager: React.FC<AuditAndSOPManagerProps> = ({
   onCompleteSOP,
 }) => {
   const [currentView, setCurrentView] = useState<"audits" | "learning">(activeTab);
-  const [activeAuditModal, setActiveAuditModal] = useState<ComplianceAudit | null>(null);
+  const [activeAuditModal, setActiveAuditModal] = useState<AuditAssignment | null>(null);
   const [activeSOPModal, setActiveSOPModal] = useState<SOPItem | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [auditAnswers, setAuditAnswers] = useState<Record<number, boolean>>({});
   const [quizScore, setQuizScore] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
-  const sampleAuditQuestions = [
-    "Driver holds current heavy vehicle licence class valid for assigned rig?",
-    "Pre-trip vehicle circle check completed and registered in maintenance log?",
-    "3-Point contact rule understood for cabin entry & egress?",
-    "Load restraint rating meets National Transport Commission Heavy Vehicle Code?",
-    "Fatigue management rest hours logged and verified within maximum legal limits?",
-  ];
+  const overdueAudits = audits.filter((a) => {
+    const days = daysUntil(a.dueDate);
+    return days !== null && days < 0 && a.status !== "Passed";
+  });
 
-  const handleAuditSubmit = () => {
-    if (!activeAuditModal) return;
-    onCompleteAudit(activeAuditModal.id);
-    setActiveAuditModal(null);
+  const handleOpenAudit = (assignment: AuditAssignment) => {
+    setActiveAuditModal(assignment);
     setAuditAnswers({});
+    setCommentInput("");
+    setSubmitError(null);
+  };
+
+  const handleAuditSubmit = async () => {
+    if (!activeAuditModal) return;
+    const questions = activeAuditModal.audit.questions;
+    if (Object.keys(auditAnswers).length < questions.length) {
+      setSubmitError(t("aud_err_required"));
+      return;
+    }
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onCompleteAudit(activeAuditModal, auditAnswers);
+      setActiveAuditModal(null);
+      setAuditAnswers({});
+      setCommentInput("");
+    } catch (err: any) {
+      setSubmitError(err?.message || t("aud_err_submit"));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSOPQuizSubmit = () => {
@@ -52,15 +106,13 @@ export const AuditAndSOPManager: React.FC<AuditAndSOPManagerProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Top Switcher Bar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-6 rounded-2xl shadow-xl backdrop-blur-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-6 rounded-2xl shadow-xl backdrop-blur-xl">
         <div>
           <h1 className="text-2xl font-extrabold text-white tracking-tight">
-            {currentView === "audits" ? "My Compliance Audits & Checks" : "My Learning SOPs & Policies"}
+            {currentView === "audits" ? t("aud_title_audits") : t("aud_title_learning")}
           </h1>
           <p className="text-slate-400 text-sm">
-            {currentView === "audits"
-              ? "Complete mandatory transport safety audits and work health safety compliance checks."
-              : "Review standard operating procedures, safety videos, and policy modules required for BNT Logistics sites."}
+            {currentView === "audits" ? t("aud_sub_audits") : t("aud_sub_learning")}
           </p>
         </div>
 
@@ -71,7 +123,7 @@ export const AuditAndSOPManager: React.FC<AuditAndSOPManagerProps> = ({
               currentView === "audits" ? "bg-emerald-600 text-white shadow-md" : "text-slate-400 hover:text-white"
             }`}
           >
-            <ClipboardCheck className="w-4 h-4" /> My Audits ({audits.length})
+            <ClipboardCheck className="w-4 h-4" /> {t("aud_my_audits", { count: audits.length })}
           </button>
           <button
             onClick={() => setCurrentView("learning")}
@@ -79,70 +131,101 @@ export const AuditAndSOPManager: React.FC<AuditAndSOPManagerProps> = ({
               currentView === "learning" ? "bg-blue-600 text-white shadow-md" : "text-slate-400 hover:text-white"
             }`}
           >
-            <GraduationCap className="w-4 h-4" /> My Learning ({sops.length})
+            <GraduationCap className="w-4 h-4" /> {t("aud_my_learning", { count: sops.length })}
           </button>
         </div>
       </div>
+
+      {/* Overdue Warning Banner */}
+      {currentView === "audits" && overdueAudits.length > 0 && (
+        <div className="flex items-start gap-3 bg-rose-500/10 border border-rose-500/30 p-4 rounded-xl">
+          <AlertTriangle className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
+          <div className="text-xs text-rose-300">
+            <span className="font-bold">{t("aud_overdue_banner")}</span>
+            <span className="block mt-1">
+              {overdueAudits.map((a) => `${a.audit.name} (${a.dueDate || t("aud_no_due")})`).join(" • ")}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* VIEW 1: AUDITS GRID */}
       {currentView === "audits" && (
         audits.length === 0 ? (
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-12 text-center shadow-xl">
             <ClipboardCheck className="w-10 h-10 text-slate-500 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-white mb-1">No Compliance Audits Assigned</h3>
+            <h3 className="text-base font-bold text-white mb-1">{t("aud_empty_audits_title")}</h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Your profile currently has no pending transport safety audits or annual compliance checks.
+              {t("aud_empty_audits_sub")}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {audits.map((audit) => (
+            {audits.map((assignment) => (
               <div
-                key={audit.id}
-                className="bg-slate-900/80 border border-slate-800 hover:border-emerald-500/40 rounded-2xl p-6 flex flex-col justify-between gap-6 transition-all shadow-xl"
+                key={assignment.id}
+                className="bg-slate-900/80 border border-slate-800 hover:border-emerald-500/40 rounded-2xl p-6 flex flex-col justify-between gap-6 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5"
               >
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <span className="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                      {audit.category}
+                      {assignment.audit.category}
                     </span>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        audit.status === "Passed"
+                        assignment.status === "Passed"
                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                          : audit.status === "In Progress"
+                          : assignment.status === "In Progress"
                           ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                          : assignment.status === "Action Required"
+                          ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
                           : "bg-slate-800 text-slate-300 border border-slate-700"
                       }`}
                     >
-                      {audit.status}
+                      {tStatus(assignment.status, t)}
                     </span>
                   </div>
 
-                  <h3 className="text-xl font-bold text-white leading-snug">{audit.name}</h3>
-                  <p className="text-slate-400 text-xs leading-relaxed">{audit.description}</p>
+                  <h3 className="font-bold text-white text-lg leading-snug">{assignment.audit.name}</h3>
 
-                  <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-800 text-xs text-slate-300 space-y-1">
-                    <div className="flex justify-between">
-                      <span>Assigned Module:</span>
-                      <span className="font-semibold text-white">{audit.assignedModule}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Attempts:</span>
-                      <span>{audit.attemptsCount} Attempts</span>
-                    </div>
+                  {assignment.audit.description && (
+                    <p className="text-xs text-slate-400 leading-relaxed">{assignment.audit.description}</p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <DueBadge date={assignment.dueDate} />
+                    {assignment.attemptsCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 border border-slate-700 text-slate-300">
+                        {t(assignment.attemptsCount === 1 ? "aud_attempts_one" : "aud_attempts_other", { count: assignment.attemptsCount })}
+                      </span>
+                    )}
+                    {assignment.audit.questions.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 border border-slate-700 text-slate-300">
+                        {t(assignment.audit.questions.length === 1 ? "aud_questions_one" : "aud_questions_other", { count: assignment.audit.questions.length })}
+                      </span>
+                    )}
                   </div>
+
+                  {assignment.lastAttemptDate && (
+                    <div className="text-[11px] text-slate-500">
+                      {t("aud_last_attempt", { date: new Date(assignment.lastAttemptDate).toLocaleString("en-AU") })}
+                    </div>
+                  )}
                 </div>
 
-                <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-                  <span className="text-xs text-slate-500 inline-flex items-center gap-1">
-                    <MessageSquare className="w-3.5 h-3.5" /> {audit.commentsCount} Comments logged
-                  </span>
+                <div className="pt-3 border-t border-slate-800/80">
                   <button
-                    onClick={() => setActiveAuditModal(audit)}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg"
+                    onClick={() => handleOpenAudit(assignment)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/30 text-emerald-300 hover:text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
                   >
-                    {audit.status === "Passed" ? "Review Audit" : "Start Audit Assessment"}
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {assignment.status === "No Attempt"
+                        ? t("aud_start")
+                        : assignment.status === "Passed"
+                        ? t("aud_review")
+                        : t("aud_continue")}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -151,199 +234,245 @@ export const AuditAndSOPManager: React.FC<AuditAndSOPManagerProps> = ({
         )
       )}
 
-      {/* VIEW 2: LEARNING SOPS GRID */}
+      {/* VIEW 2: LEARNING SOPs GRID */}
       {currentView === "learning" && (
         sops.length === 0 ? (
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-12 text-center shadow-xl">
             <GraduationCap className="w-10 h-10 text-slate-500 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-white mb-1">No Learning SOPs Pending</h3>
+            <h3 className="text-base font-bold text-white mb-1">{t("aud_empty_sops_title")}</h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              You are up to date on all standard operating procedures and required learning modules.
+              {t("aud_empty_sops_sub")}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sops.map((sop) => (
-            <div
-              key={sop.id}
-              className="bg-slate-900/80 border border-slate-800 hover:border-blue-500/40 rounded-2xl p-6 flex flex-col justify-between gap-6 transition-all shadow-xl"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded text-xs font-bold bg-blue-500/10 border border-blue-500/30 text-blue-400">
-                    {sop.category}
-                  </span>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      sop.status === "Passed"
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                        : "bg-slate-800 text-slate-300 border border-slate-700"
-                    }`}
-                  >
-                    {sop.status}
-                  </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {sops.map((sop) => (
+              <div
+                key={sop.id}
+                className="bg-slate-900/80 border border-slate-800 hover:border-blue-500/40 rounded-2xl p-6 flex flex-col justify-between gap-6 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="px-2.5 py-1 rounded text-xs font-bold uppercase tracking-wider bg-blue-500/10 border border-blue-500/30 text-blue-400">
+                      {sop.category}
+                    </span>
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        sop.status === "Passed"
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                          : sop.status === "In Progress"
+                          ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                          : sop.status === "Expired"
+                          ? "bg-rose-500/10 text-rose-400 border border-rose-500/30"
+                          : "bg-slate-800 text-slate-300 border border-slate-700"
+                      }`}
+                    >
+                      {tStatus(sop.status, t)}
+                    </span>
+                  </div>
+
+                  <h3 className="font-bold text-white text-lg leading-snug">
+                    <span className="text-slate-500 text-xs font-mono mr-2">{sop.code}</span>
+                    {sop.name}
+                  </h3>
+
+                  <p className="text-xs text-slate-400 leading-relaxed">{sop.contentSummary}</p>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {sop.isMandatory && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                        {t("aud_mandatory")}
+                      </span>
+                    )}
+                    {sop.quizQuestionsCount ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 border border-slate-700 text-slate-300">
+                        {t(sop.quizQuestionsCount === 1 ? "aud_quiz_qs_one" : "aud_quiz_qs_other", { count: sop.quizQuestionsCount })}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div className="text-xs font-mono text-blue-400 font-bold">{sop.code}</div>
-                <h3 className="text-lg font-bold text-white leading-snug">{sop.name}</h3>
-                <p className="text-slate-400 text-xs leading-relaxed">{sop.contentSummary}</p>
-
-                {sop.dueDate && (
-                  <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" /> Due for Renewal: {sop.dueDate}
-                  </div>
-                )}
+                <div className="pt-3 border-t border-slate-800/80">
+                  <button
+                    onClick={() => setActiveSOPModal(sop)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-blue-600/20 hover:bg-blue-600 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    <span>{t("aud_open_module")}</span>
+                  </button>
+                </div>
               </div>
-
-              <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
-                <span className="text-xs text-slate-400">{sop.quizQuestionsCount} Interactive Questions</span>
-                <button
-                  onClick={() => setActiveSOPModal(sop)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg"
-                >
-                  {sop.status === "Passed" ? "Review Module" : "Start Learning"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
         )
       )}
 
       {/* AUDIT MODAL */}
       {activeAuditModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div>
-                <span className="px-2.5 py-1 rounded text-[10px] font-bold uppercase bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                  {activeAuditModal.category} Audit
-                </span>
-                <h2 className="text-xl font-bold text-white mt-1">{activeAuditModal.name}</h2>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5 text-emerald-400" />
+                  {activeAuditModal.audit.name}
+                </h2>
+                <p className="text-xs text-emerald-400">
+                  {activeAuditModal.audit.category}
+                  {activeAuditModal.audit.description ? ` • ${activeAuditModal.audit.description}` : ""}
+                </p>
               </div>
               <button
                 onClick={() => setActiveAuditModal(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4">
-              <p className="text-sm text-slate-300 bg-slate-800/50 p-4 rounded-xl border border-slate-800">
-                {activeAuditModal.description}
+              <p className="text-xs text-slate-400">
+                {t("aud_answer_all")}{" "}
+                <span className="text-emerald-400 font-semibold">{t("aud_pass_hint")}</span>
               </p>
-
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Verification Questions (All Required)
-              </h3>
-
-              <div className="space-y-3">
-                {sampleAuditQuestions.map((q, idx) => (
-                  <div key={idx} className="p-4 rounded-xl bg-slate-800/40 border border-slate-800 flex items-center justify-between gap-4">
-                    <span className="text-xs text-slate-200 font-medium">{idx + 1}. {q}</span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => setAuditAnswers({ ...auditAnswers, [idx]: true })}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                          auditAnswers[idx] === true ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                        }`}
-                      >
-                        YES
-                      </button>
-                      <button
-                        onClick={() => setAuditAnswers({ ...auditAnswers, [idx]: false })}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                          auditAnswers[idx] === false ? "bg-rose-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                        }`}
-                      >
-                        NO
-                      </button>
-                    </div>
+              {activeAuditModal.audit.questions.map((question, index) => (
+                <div
+                  key={index}
+                  className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 space-y-3"
+                >
+                  <p className="text-sm text-white font-medium">
+                    <span className="text-slate-500 mr-2">{index + 1}.</span>
+                    {question}
+                  </p>
+                  <div className="flex gap-3">
+                    {(["Yes", "No"] as const).map((option) => {
+                      const value = option === "Yes";
+                      const selected = auditAnswers[index] === value;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setAuditAnswers((prev) => ({ ...prev, [index]: value }))}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            selected
+                              ? value
+                                ? "bg-emerald-600 text-white shadow-md"
+                                : "bg-rose-600 text-white shadow-md"
+                              : "bg-slate-700 text-slate-300 hover:text-white"
+                          }`}
+                        >
+                          {value ? t("aud_yes") : t("aud_no")}
+                        </button>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-400">Driver / Auditor Comments</label>
-                <textarea
-                  rows={2}
-                  value={commentInput}
-                  onChange={(e) => setCommentInput(e.target.value)}
-                  placeholder="Note any site or equipment issues found..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
-                />
-              </div>
+              {activeAuditModal.audit.questions.length === 0 && (
+                <p className="text-xs text-slate-500 italic">
+                  {t("aud_no_questions")}
+                </p>
+              )}
+            </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
-                <button
-                  onClick={() => setActiveAuditModal(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAuditSubmit}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg transition-all"
-                >
-                  Submit Audit Verification
-                </button>
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                {t("aud_comments")}
+              </label>
+              <textarea
+                value={commentInput}
+                onChange={(e) => setCommentInput(e.target.value)}
+                rows={2}
+                placeholder={t("aud_comments_ph")}
+                className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500 resize-none"
+              />
+            </div>
+
+            {submitError && (
+              <div className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-lg p-3">
+                {submitError}
               </div>
+            )}
+
+            <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActiveAuditModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold"
+              >
+                {t("aud_cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting || activeAuditModal.audit.questions.length === 0}
+                onClick={handleAuditSubmit}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {isSubmitting ? t("aud_submitting") : t("aud_submit")}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* SOP LEARNING MODAL */}
+      {/* SOP MODAL (unchanged screen-only flow) */}
       {activeSOPModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-slate-900 border border-blue-500/30 rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <div className="bg-slate-900 border border-blue-500/30 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-6">
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div>
-                <span className="text-xs font-mono font-bold text-blue-400">{activeSOPModal.code}</span>
-                <h2 className="text-xl font-bold text-white">{activeSOPModal.name}</h2>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-blue-400" />
+                  {activeSOPModal.name}
+                </h2>
+                <p className="text-xs text-blue-400 font-mono">{activeSOPModal.code}</p>
               </div>
               <button
                 onClick={() => setActiveSOPModal(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4">
-              {activeSOPModal.videoUrl && (
-                <div className="rounded-xl overflow-hidden border border-slate-800 aspect-video bg-black">
-                  <video controls className="w-full h-full object-cover">
-                    <source src={activeSOPModal.videoUrl} type="video/mp4" />
-                    Your browser does not support HTML5 video.
-                  </video>
-                </div>
-              )}
-
-              <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-800 space-y-2">
-                <h3 className="text-sm font-bold text-white">SOP Summary & Protocol Instructions</h3>
+              <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
                 <p className="text-xs text-slate-300 leading-relaxed">{activeSOPModal.contentSummary}</p>
               </div>
 
-              {quizScore !== null ? (
-                <div className="p-6 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-center space-y-2">
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-2">
-                    <Award className="w-7 h-7" />
-                  </div>
-                  <h3 className="text-xl font-bold text-white">Module Completed Successfully!</h3>
-                  <p className="text-xs text-emerald-300">You scored {quizScore}% on the SOP assessment.</p>
-                </div>
-              ) : (
-                <div className="pt-2 text-right">
-                  <button
-                    onClick={handleSOPQuizSubmit}
-                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg transition-all inline-flex items-center gap-1.5"
-                  >
-                    Complete & Verify SOP <ArrowRight className="w-4 h-4" />
-                  </button>
+              {activeSOPModal.videoUrl && (
+                <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4 text-center">
+                  <Play className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+                  <p className="text-xs text-slate-400">{t("aud_video_note")}</p>
                 </div>
               )}
+
+              {quizScore !== null && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+                  <p className="text-emerald-400 font-bold">{t("aud_quiz_passed", { score: quizScore })}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActiveSOPModal(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold"
+              >
+                {t("aud_close")}
+              </button>
+              <button
+                type="button"
+                onClick={handleSOPQuizSubmit}
+                disabled={quizScore !== null}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {t("aud_complete_module")}
+              </button>
             </div>
           </div>
         </div>

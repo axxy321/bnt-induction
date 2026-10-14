@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { CheckCircle2, Info, Shield, Play, Pause } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -7,6 +8,9 @@ interface VideoPlayerProps {
   onComplete: () => Promise<void> | void;
   onStart?: () => void;
   className?: string;
+  savedPosition?: number;
+  onPositionUpdate?: (seconds: number) => void;
+  onDurationChange?: (seconds: number) => void;
 }
 
 declare global {
@@ -16,7 +20,8 @@ declare global {
   }
 }
 
-export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoPlayerProps) {
+export function VideoPlayer({ src, onComplete, onStart, className = "", savedPosition, onPositionUpdate, onDurationChange }: VideoPlayerProps) {
+  const { t } = useTranslation();
   const [progress, setProgress] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -31,6 +36,7 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
   const isSeekingRef = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout>();
   const completeFiredRef = useRef(false);
+  const lastSavedPosRef = useRef(0);
 
   // Extract Youtube ID
   let videoId = "";
@@ -97,6 +103,15 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
             enablejsapi: 1
           },
           events: {
+            onReady: () => {
+              if (savedPosition && savedPosition > 0 && playerRef.current?.seekTo) {
+                try {
+                  playerRef.current.seekTo(savedPosition, true);
+                  onPositionUpdate?.(savedPosition);
+                  lastSavedPosRef.current = savedPosition;
+                } catch {}
+              }
+            },
             onStateChange: (event: any) => {
               if (event.data === window.YT.PlayerState.PLAYING) {
                 setIsPlaying(true);
@@ -109,9 +124,17 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
                     if (dur > 0) {
                       setCurrentTime(curr);
                       setDuration(dur);
+                      onDurationChange?.(dur);
                       const pct = (curr / dur) * 100;
                       setProgress(pct);
-                      if (pct >= 90) void markCompleted();
+                      if (onPositionUpdate && curr - lastSavedPosRef.current >= 5) {
+                        lastSavedPosRef.current = curr;
+                        onPositionUpdate(curr);
+                      }
+                      // Complete no earlier than 8s before the end so the
+                      // server-side minimum-watch check is satisfied.
+                      const completionThreshold = Math.max(90, ((dur - 8) / dur) * 100);
+                      if (pct >= completionThreshold) void markCompleted();
                     }
                   }
                 }, 1000);
@@ -142,16 +165,20 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
     if (completed || completeFiredRef.current) return;
 
     completeFiredRef.current = true;
+    setCompleted(true);
+    setProgress(100);
     setCompletionError("");
+
     try {
       await onComplete();
-      setCompleted(true);
-      setProgress(100);
-    } catch {
-      // Do not show a completed state until the server has recorded it.
+    } catch (err) {
       completeFiredRef.current = false;
-      setCompletionError("We could not record completion yet. Keep watching and try again shortly.");
-    }
+      setCompleted(false);
+      setProgress(90);
+      const message = err instanceof Error && err.message
+        ? err.message
+        : t("vid_error_default");
+      setCompletionError(message);    }
   };
 
   const handleTimeUpdate = () => {
@@ -173,7 +200,32 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
       setDuration(dur);
       const pct = (curr / dur) * 100;
       setProgress(pct);
-      if (pct >= 90) markCompleted();
+      if (onPositionUpdate && curr - lastSavedPosRef.current >= 5) {
+        lastSavedPosRef.current = curr;
+        onPositionUpdate(curr);
+      }
+      // Complete no earlier than 8s before the end so the server-side
+      // minimum-watch check (duration - 10s buffer) is satisfied.
+      const completionThreshold = Math.max(90, ((dur - 8) / dur) * 100);
+      if (pct >= completionThreshold) markCompleted();
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (!videoRef.current) return;
+    const dur = videoRef.current.duration;
+    if (dur > 0) {
+      setDuration(dur);
+      onDurationChange?.(dur);
+    }
+    if (savedPosition && savedPosition > 0 && dur > 0) {
+      const target = Math.min(savedPosition, Math.max(0, dur - 5));
+      videoRef.current.currentTime = target;
+      maxWatchedRef.current = target;
+      setCurrentTime(target);
+      const pct = (target / dur) * 100;
+      setProgress(pct);
+      onPositionUpdate?.(target);
     }
   };
 
@@ -227,10 +279,10 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: "0.92rem", color: "#f8fafc" }}>
-                Australian Heavy Vehicle Safety Module Stream
+                {t("vid_stream")}
               </div>
               <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                BNT Logistics • Official NHVR Accredited Training
+                {t("vid_branding")}
               </div>
             </div>
           </div>
@@ -250,11 +302,11 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
             }}
           >
             {completed ? (
-              <><CheckCircle2 className="w-3.5 h-3.5" /> Module Completed</>
+              <><CheckCircle2 className="w-3.5 h-3.5" /> {t("vid_completed")}</>
             ) : isPlaying ? (
-              <><Play className="w-3.5 h-3.5 fill-current" /> Playing Training Video</>
+              <><Play className="w-3.5 h-3.5 fill-current" /> {t("vid_playing")}</>
             ) : (
-              <><Pause className="w-3.5 h-3.5 fill-current" /> Ready to Watch</>
+              <><Pause className="w-3.5 h-3.5 fill-current" /> {t("vid_ready")}</>
             )}
           </div>
         </div>
@@ -272,7 +324,7 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
           >
             <iframe
               src={embedUrl}
-              title="Australian Heavy Vehicle Safety Module Video"
+              title={t("vid_embed_title")}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
               style={{
@@ -302,6 +354,7 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
               }}
               onPause={() => setIsPlaying(false)}
               onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoadedMetadata}
               onEnded={() => void markCompleted()}
             />
           </div>
@@ -312,8 +365,8 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
           {duration > 0 && (
             <div style={{ marginBottom: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "#94a3b8", marginBottom: "6px", fontWeight: 600 }}>
-                <span>Module Playback Progress ({formatTime(currentTime)} / {formatTime(duration)})</span>
-                <span>{Math.round(progress)}% Watched</span>
+                <span>{t("vid_progress", { current: formatTime(currentTime), total: formatTime(duration) })}</span>
+                <span>{t("vid_watched", { pct: Math.round(progress) })}</span>
               </div>
 
               <div style={{ height: "6px", background: "rgba(255, 255, 255, 0.1)", borderRadius: "3px", overflow: "hidden" }}>
@@ -330,12 +383,12 @@ export function VideoPlayer({ src, onComplete, onStart, className = "" }: VideoP
             {completed ? (
               <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#4ade80", fontSize: "0.85rem", fontWeight: 700 }}>
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Safety video requirements satisfied. You are clear to proceed to the next module.</span>
+                <span>{t("vid_clear")}</span>
               </div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#94a3b8", fontSize: "0.8rem" }}>
                 <Info className="w-4 h-4 text-blue-400" />
-                <span>Watch the official NHVR Australian Heavy Vehicle training video above.</span>
+                <span>{t("vid_instruction")}</span>
               </div>
             )}
 

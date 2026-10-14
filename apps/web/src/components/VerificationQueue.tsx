@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { FileCheck, CheckCircle2, Clock, Check, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useAppState } from "../state/AppProvider";
+import { useAppState } from "../state/AppContext";
 import { apiBaseUrl, supabase } from "../lib/supabase";
+import { showToast } from "./ui/Toast";
 
 interface PendingDocument {
   id: string;
@@ -19,25 +20,24 @@ interface PendingDocument {
   };
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  driver_license: "Driver Licence",
-  medical_certificate: "Medical Certificate",
-  identity_proof: "Identity Proof"
-};
-
 export function VerificationQueue() {
+  const { t } = useTranslation();
   const { session } = useAppState();
+  const TYPE_LABELS: Record<string, string> = {
+    driver_license: t("vq_type_licence"),
+    medical_certificate: t("vq_type_medical"),
+    identity_proof: t("vq_type_identity")
+  };
+  const NODE_LABELS: Record<string, string> = {
+    "[PROFILE & UPLOAD]": t("vq_node_1"),
+    "[PENDING VERIFICATION]": t("vq_node_2"),
+    "[APPROVE]": t("vq_node_3"),
+    "[TRAINING UNLOCKED]": t("vq_node_4")
+  };
   const [docs, setDocs] = useState<PendingDocument[]>([]);
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
   const [expiryByDocument, setExpiryByDocument] = useState<Record<string, string>>({});
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-
-  const showToast = (msg: string, ok = true) => {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 4000);
-  };
-
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
@@ -86,7 +86,7 @@ export function VerificationQueue() {
     setProcessing(docId + action);
     try {
       let isSuccess = false;
-      let msg = action === "approve" ? "Document approved." : "Document rejected.";
+      let msg = action === "approve" ? t("vq_approved") : t("vq_rejected");
 
       if (session?.accessToken) {
         const res = await fetch(`${apiBaseUrl}/admin/documents/${docId}/verify`, {
@@ -129,10 +129,10 @@ export function VerificationQueue() {
         isSuccess = true;
       }
 
-      showToast(msg, true);
+      showToast(msg, "success");
       void fetchQueue();
     } catch {
-      showToast("Action failed. Please try again.", false);
+      showToast(t("vq_fail"), "error");
     } finally {
       setProcessing(null);
     }
@@ -149,35 +149,22 @@ export function VerificationQueue() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h2 style={{ margin: "0 0 4px", fontSize: "1.4rem" }}>Verification Queue</h2>
-          <p className="muted" style={{ margin: 0 }}>Review and approve driver-submitted documents to unlock training.</p>
+          <h2 style={{ margin: "0 0 4px", fontSize: "1.4rem" }}>{t("vq_title")}</h2>
+          <p className="muted" style={{ margin: 0 }}>{t("vq_subtitle")}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           {docs.length > 0 && (
             <span style={{
               background: "#ef4444", color: "#fff", fontWeight: 700, fontSize: "0.78rem",
               padding: "4px 10px", borderRadius: "999px"
-            }}>{docs.length} PENDING</span>
+            }}>{t(docs.length === 1 ? "vq_pending_one" : "vq_pending_other", { count: docs.length })}</span>
           )}
           <button onClick={() => void fetchQueue()}
             style={{ padding: "8px 16px", border: "1px solid var(--border)", borderRadius: "10px", cursor: "pointer", background: "transparent", fontWeight: 600 }}>
-            Refresh
+            {t("vq_refresh")}
           </button>
         </div>
       </div>
-
-      {/* Toast */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            style={{
-              background: toast.ok ? "#22c55e" : "#ef4444",
-              color: "#fff", padding: "10px 18px", borderRadius: "10px", marginBottom: "16px", fontWeight: 600
-            }}>
-            {toast.msg}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Status machine badge */}
       <div style={{
@@ -189,19 +176,19 @@ export function VerificationQueue() {
             fontWeight: node.startsWith("[") ? 700 : 400,
             color: node === "[PENDING VERIFICATION]" ? "#d97706" : node === "[APPROVE]" ? "#16a34a" : "inherit",
             fontSize: "0.8rem", opacity: node === "→" ? 0.5 : 1
-          }}>{node}</span>
+          }}>{NODE_LABELS[node] ?? node}</span>
         ))}
       </div>
 
-      {loading && <p className="muted">Loading queue...</p>}
+      {loading && <p className="muted">{t("vq_loading")}</p>}
 
       {!loading && docs.length === 0 && (
         <div style={{ textAlign: "center", padding: "60px 20px", opacity: 0.5 }}>
           <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
             <CheckCircle2 className="w-12 h-12 text-emerald-500" />
           </div>
-          <p style={{ fontWeight: 600, margin: 0 }}>No documents pending verification.</p>
-          <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>All uploaded documents have been reviewed.</p>
+          <p style={{ fontWeight: 600, margin: 0 }}>{t("vq_empty_title")}</p>
+          <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>{t("vq_empty_sub")}</p>
         </div>
       )}
 
@@ -209,21 +196,21 @@ export function VerificationQueue() {
         {Object.entries(groupedByDriver).map(([driverId, driverDocs]) => {
           const profile = driverDocs[0]?.profiles;
           return (
-            <div key={driverId} className="glass" style={{ borderRadius: "18px", padding: "20px", border: "1px solid rgba(217,119,6,0.25)", background: "rgba(255,251,235,0.04)" }}>
+            <div key={driverId} className="glass card-hover" style={{ borderRadius: "18px", padding: "20px", border: "1px solid rgba(217,119,6,0.25)", background: "rgba(255,251,235,0.04)" }}>
               {/* Driver row */}
               <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
                 <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#f59e0b,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>
                   {(profile?.full_name ?? "?")[0].toUpperCase()}
                 </div>
                 <div>
-                  <strong style={{ fontSize: "0.95rem" }}>{profile?.full_name ?? "Unknown Driver"}</strong>
+                  <strong style={{ fontSize: "0.95rem" }}>{profile?.full_name ?? t("vq_unknown_driver")}</strong>
                   <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>{profile?.email ?? driverId}</p>
                 </div>
                 <span style={{
                   marginLeft: "auto", padding: "4px 12px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 700,
                   background: "rgba(217,119,6,0.15)", color: "#d97706", display: "inline-flex", alignItems: "center", gap: "5px"
                 }}>
-                  <Clock className="w-3.5 h-3.5" /> AWAITING VERIFICATION
+                  <Clock className="w-3.5 h-3.5" /> {t("vq_awaiting")}
                 </span>
               </div>
 
@@ -239,12 +226,12 @@ export function VerificationQueue() {
                       <div>
                         <strong style={{ fontSize: "0.88rem" }}>{TYPE_LABELS[doc.type] ?? doc.type}</strong>
                         <p className="muted" style={{ margin: 0, fontSize: "0.78rem" }}>
-                          {doc.file_name ?? "Uploaded document"} • {new Date(doc.uploaded_at).toLocaleDateString("en-AU")}
+                          {doc.file_name ?? t("vq_uploaded_doc")} • {new Date(doc.uploaded_at).toLocaleDateString("en-AU")}
                         </p>
                       </div>
                     </div>
                     <label htmlFor={`doc-expiry-${doc.id}`} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.78rem" }}>
-                      Expiry (if applicable)
+                      {t("vq_expiry_label")}
                       <input
                         id={`doc-expiry-${doc.id}`}
                         name={`expiry_${doc.id}`}
@@ -264,7 +251,7 @@ export function VerificationQueue() {
                           background: "#16a34a", color: "#fff", fontWeight: 700, fontSize: "0.85rem",
                           opacity: processing?.startsWith(doc.id) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: "4px"
                         }}>
-                        {processing === doc.id + "approve" ? "..." : <><Check className="w-4 h-4" /> Approve</>}
+                        {processing === doc.id + "approve" ? "..." : <><Check className="w-4 h-4" /> {t("vq_approve")}</>}
                       </button>
                       <button
                         onClick={() => void handleAction(doc.id, "reject")}
@@ -274,7 +261,7 @@ export function VerificationQueue() {
                           background: "transparent", color: "#ef4444", fontWeight: 700, fontSize: "0.85rem",
                           opacity: processing?.startsWith(doc.id) ? 0.6 : 1, display: "inline-flex", alignItems: "center", gap: "4px"
                         }}>
-                        {processing === doc.id + "reject" ? "..." : <><X className="w-4 h-4" /> Reject</>}
+                        {processing === doc.id + "reject" ? "..." : <><X className="w-4 h-4" /> {t("vq_reject")}</>}
                       </button>
                     </div>
                   </div>
