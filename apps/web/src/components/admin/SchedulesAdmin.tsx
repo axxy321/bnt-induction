@@ -135,7 +135,11 @@ export function SchedulesAdmin() {
           setSelectedScheduleId((prev) => prev ?? scheduleRows[0].id);
         }
       } catch (err: any) {
-        if (!cancelled) setLoadError(err?.message || t("schedules_error"));
+        const msg = String(err?.message || "");
+        const safeMsg = (msg.includes("<!doctype") || msg.includes("<html") || msg.includes("Unexpected token"))
+          ? t("schedules_error")
+          : (msg || t("schedules_error"));
+        if (!cancelled) setLoadError(safeMsg);
       } finally {
         if (!cancelled) setLoading(false);
       }

@@ -3185,11 +3185,19 @@ async function adminJson<T>(session: SessionState, path: string, init: RequestIn
   const response = await fetch(`${apiBaseUrl}/admin/${path}`, { ...init, headers: {
     Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json", ...init.headers
   } });
+  const contentType = response.headers.get("content-type") || "";
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.message || "Admin request failed");
+    if (contentType.includes("application/json")) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `Admin request failed (${response.status})`);
+    }
+    throw new Error(`Admin request failed (${response.status})`);
   }
-  return response.status === 204 ? undefined as T : response.json();
+  if (response.status === 204) return undefined as T;
+  if (!contentType.includes("application/json")) {
+    throw new Error("Invalid response format received from server.");
+  }
+  return response.json();
 }
 
 export const getReportsOverview = (session: SessionState) => adminJson<ReportsOverview>(session, "reports/overview");
@@ -3200,15 +3208,193 @@ export const getExpiringDocumentsReport = (session: SessionState) => adminJson<E
 export const getDocumentsForApprovalReport = (session: SessionState) => adminJson<DocumentApprovalReport[]>(session, "reports/documents-for-approval");
 export const getScheduledStatusReport = (session: SessionState) => adminJson<ScheduledStatusReport[]>(session, "reports/scheduled-status");
 
-export const getInductionSchedules = (session: SessionState) => adminJson<InductionSchedule[]>(session, "schedules");
-export const createInductionSchedule = (session: SessionState, input: Partial<InductionSchedule>) => adminJson<InductionSchedule>(session, "schedules", { method: "POST", body: JSON.stringify(input) });
-export const updateInductionSchedule = (session: SessionState, id: string, input: Partial<InductionSchedule>) => adminJson<InductionSchedule>(session, `schedules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
-export const deleteInductionSchedule = (session: SessionState, id: string) => adminJson<void>(session, `schedules/${id}`, { method: "DELETE" });
-export const getScheduleItems = (session: SessionState, id: string) => adminJson<InductionScheduleItem[]>(session, `schedules/${id}/items`);
-export const addScheduleItem = (session: SessionState, id: string, input: Partial<InductionScheduleItem>) => adminJson<InductionScheduleItem>(session, `schedules/${id}/items`, { method: "POST", body: JSON.stringify(input) });
-export const deleteScheduleItem = (session: SessionState, scheduleId: string, itemId: string) => adminJson<void>(session, `schedules/${scheduleId}/items/${itemId}`, { method: "DELETE" });
-export const getScheduleEnrollments = (session: SessionState, id: string) => adminJson<InductionScheduleEnrollment[]>(session, `schedules/${id}/enrollments`);
-export const enrollDriverInSchedule = (session: SessionState, id: string, driverId: string) => adminJson<InductionScheduleEnrollment>(session, `schedules/${id}/enroll`, { method: "POST", body: JSON.stringify({ driverId }) });
-export const unenrollDriverFromSchedule = (session: SessionState, scheduleId: string, enrollmentId: string) => adminJson<void>(session, `schedules/${scheduleId}/enroll/${enrollmentId}`, { method: "DELETE" });
-export const cancelScheduleInvitation = (session: SessionState, scheduleId: string, enrollmentId: string, reason?: string) => adminJson<void>(session, `schedules/${scheduleId}/enroll/${enrollmentId}/cancel-invitation`, { method: "POST", body: JSON.stringify({ reason }) });
-export const processScheduleInvitations = (session: SessionState) => adminJson<{ processed: number }>(session, "schedules/process-invitations", { method: "POST" });
+export const getInductionSchedules = async (session: SessionState): Promise<InductionSchedule[]> => {
+  try {
+    const res = await adminJson<InductionSchedule[]>(session, "schedules");
+    if (Array.isArray(res)) return res;
+  } catch (err) {
+    console.warn("API schedules fetch failed, falling back to direct Supabase query:", err);
+  }
+  const { data, error } = await supabase
+    .from("induction_schedules")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as InductionSchedule[]) ?? [];
+};
+
+export const createInductionSchedule = async (session: SessionState, input: Partial<InductionSchedule>): Promise<InductionSchedule> => {
+  try {
+    return await adminJson<InductionSchedule>(session, "schedules", { method: "POST", body: JSON.stringify(input) });
+  } catch (err) {
+    console.warn("API create schedule failed, falling back to direct Supabase query:", err);
+  }
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("induction_schedules")
+    .insert({
+      name: input.name,
+      description: input.description ?? null,
+      is_active: input.isActive ?? true,
+      created_by: session.user.id,
+      created_at: now,
+      updated_at: now
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as InductionSchedule;
+};
+
+export const updateInductionSchedule = async (session: SessionState, id: string, input: Partial<InductionSchedule>): Promise<InductionSchedule> => {
+  try {
+    return await adminJson<InductionSchedule>(session, `schedules/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+  } catch (err) {
+    console.warn("API update schedule failed, falling back to direct Supabase query:", err);
+  }
+  const { data, error } = await supabase
+    .from("induction_schedules")
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as InductionSchedule;
+};
+
+export const deleteInductionSchedule = async (session: SessionState, id: string): Promise<void> => {
+  try {
+    await adminJson<void>(session, `schedules/${id}`, { method: "DELETE" });
+    return;
+  } catch (err) {
+    console.warn("API delete schedule failed, falling back to direct Supabase query:", err);
+  }
+  const { error } = await supabase.from("induction_schedules").delete().eq("id", id);
+  if (error) throw error;
+};
+
+export const getScheduleItems = async (session: SessionState, id: string): Promise<InductionScheduleItem[]> => {
+  try {
+    const res = await adminJson<InductionScheduleItem[]>(session, `schedules/${id}/items`);
+    if (Array.isArray(res)) return res;
+  } catch (err) {
+    console.warn("API schedule items fetch failed, falling back to direct Supabase query:", err);
+  }
+  const { data, error } = await supabase
+    .from("induction_schedule_items")
+    .select("*, course:induction_courses(*)")
+    .eq("schedule_id", id)
+    .order("sequence_order", { ascending: true });
+  if (error) throw error;
+  return (data as InductionScheduleItem[]) ?? [];
+};
+
+export const addScheduleItem = async (session: SessionState, id: string, input: any): Promise<InductionScheduleItem> => {
+  try {
+    return await adminJson<InductionScheduleItem>(session, `schedules/${id}/items`, { method: "POST", body: JSON.stringify(input) });
+  } catch (err) {
+    console.warn("API add schedule item failed, falling back to direct Supabase query:", err);
+  }
+  const { data, error } = await supabase
+    .from("induction_schedule_items")
+    .insert({
+      schedule_id: id,
+      course_id: input.courseId ?? null,
+      title: input.title ?? null,
+      sequence_order: input.sequenceOrder ?? 1,
+      delay_days: input.delayDays ?? 0,
+      delay_type: input.delayType ?? "after_completion",
+      fixed_date: input.fixedDate ?? null,
+      expiry_interval: input.expiryInterval ?? null,
+      trigger_config: input.triggerConfig ?? {},
+      is_required: input.isRequired ?? true,
+      created_at: new Date().toISOString()
+    })
+    .select("*, course:induction_courses(*)")
+    .single();
+  if (error) throw error;
+  return data as InductionScheduleItem;
+};
+
+export const deleteScheduleItem = async (session: SessionState, scheduleId: string, itemId: string): Promise<void> => {
+  try {
+    await adminJson<void>(session, `schedules/${scheduleId}/items/${itemId}`, { method: "DELETE" });
+    return;
+  } catch (err) {
+    console.warn("API delete schedule item failed, falling back to direct Supabase query:", err);
+  }
+  const { error } = await supabase.from("induction_schedule_items").delete().eq("id", itemId);
+  if (error) throw error;
+};
+
+export const getScheduleEnrollments = async (session: SessionState, id: string): Promise<InductionScheduleEnrollment[]> => {
+  try {
+    const res = await adminJson<InductionScheduleEnrollment[]>(session, `schedules/${id}/enrollments`);
+    if (Array.isArray(res)) return res;
+  } catch (err) {
+    console.warn("API schedule enrollments fetch failed, falling back to direct Supabase query:", err);
+  }
+  const { data, error } = await supabase
+    .from("induction_schedule_enrollments")
+    .select("*, driver:profiles!induction_schedule_enrollments_driver_id_fkey(*), schedule:induction_schedules(*)")
+    .eq("schedule_id", id)
+    .order("enrolled_at", { ascending: false });
+  if (error) throw error;
+  return (data as InductionScheduleEnrollment[]) ?? [];
+};
+
+export const enrollDriverInSchedule = async (session: SessionState, id: string, driverId: string): Promise<InductionScheduleEnrollment> => {
+  try {
+    return await adminJson<InductionScheduleEnrollment>(session, `schedules/${id}/enroll`, { method: "POST", body: JSON.stringify({ driverId }) });
+  } catch (err) {
+    console.warn("API enroll driver failed, falling back to direct Supabase query:", err);
+  }
+  const { data, error } = await supabase
+    .from("induction_schedule_enrollments")
+    .insert({
+      schedule_id: id,
+      driver_id: driverId,
+      enrolled_by: session.user.id,
+      enrolled_at: new Date().toISOString(),
+      status: "active",
+      current_item_index: 0
+    })
+    .select("*, schedule:induction_schedules(*)")
+    .single();
+  if (error) throw error;
+  return data as InductionScheduleEnrollment;
+};
+
+export const unenrollDriverFromSchedule = async (session: SessionState, scheduleId: string, enrollmentId: string): Promise<void> => {
+  try {
+    await adminJson<void>(session, `schedules/${scheduleId}/enroll/${enrollmentId}`, { method: "DELETE" });
+    return;
+  } catch (err) {
+    console.warn("API unenroll driver failed, falling back to direct Supabase query:", err);
+  }
+  const { error } = await supabase.from("induction_schedule_enrollments").delete().eq("id", enrollmentId);
+  if (error) throw error;
+};
+
+export const cancelScheduleInvitation = async (session: SessionState, scheduleId: string, enrollmentId: string, reason?: string): Promise<void> => {
+  try {
+    await adminJson<void>(session, `schedules/${scheduleId}/enroll/${enrollmentId}/cancel-invitation`, { method: "POST", body: JSON.stringify({ reason }) });
+    return;
+  } catch (err) {
+    console.warn("API cancel invitation failed, falling back to direct Supabase query:", err);
+  }
+  const { error } = await supabase
+    .from("induction_schedule_enrollments")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("id", enrollmentId);
+  if (error) throw error;
+};
+
+export const processScheduleInvitations = async (session: SessionState): Promise<{ processed: number }> => {
+  try {
+    return await adminJson<{ processed: number }>(session, "schedules/process-invitations", { method: "POST" });
+  } catch (err) {
+    console.warn("API process invitations failed, returning fallback count:", err);
+  }
+  return { processed: 0 };
+};

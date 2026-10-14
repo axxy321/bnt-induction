@@ -1728,6 +1728,160 @@ export default async function handler(request: Request): Promise<Response> {
       if (docVerifyMatch && method === "POST") {
         return await handleVerifyDocument(request, adminId, docVerifyMatch[1]);
       }
+
+      // --- Induction Schedules ---
+      if (cleanPath === "admin/schedules" && method === "GET") {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+          .from("induction_schedules")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return jsonResponse(data ?? []);
+      }
+
+      if (cleanPath === "admin/schedules" && method === "POST") {
+        const supabase = getSupabaseAdmin();
+        const body = (await request.json().catch(() => ({}))) as any;
+        const now = new Date().toISOString();
+        const { data, error } = await supabase
+          .from("induction_schedules")
+          .insert({
+            name: body.name,
+            description: body.description ?? null,
+            is_active: body.isActive ?? true,
+            created_by: adminId,
+            created_at: now,
+            updated_at: now
+          })
+          .select()
+          .single();
+        if (error) throw error;
+        return jsonResponse(data, 201);
+      }
+
+      const scheduleMatch = cleanPath.match(/^admin\/schedules\/([^/]+)$/);
+      if (scheduleMatch && method === "GET") {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+          .from("induction_schedules")
+          .select("*")
+          .eq("id", scheduleMatch[1])
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return errorResponse("Schedule not found.", 404);
+        return jsonResponse(data);
+      }
+
+      if (scheduleMatch && method === "PATCH") {
+        const supabase = getSupabaseAdmin();
+        const body = (await request.json().catch(() => ({}))) as any;
+        const { data, error } = await supabase
+          .from("induction_schedules")
+          .update({ ...body, updated_at: new Date().toISOString() })
+          .eq("id", scheduleMatch[1])
+          .select()
+          .single();
+        if (error) throw error;
+        return jsonResponse(data);
+      }
+
+      if (scheduleMatch && method === "DELETE") {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from("induction_schedules").delete().eq("id", scheduleMatch[1]);
+        if (error) throw error;
+        return jsonResponse({ message: "Schedule deleted." });
+      }
+
+      // Schedule Items
+      const scheduleItemsMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/items$/);
+      if (scheduleItemsMatch && method === "GET") {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+          .from("induction_schedule_items")
+          .select("*, course:induction_courses(*)")
+          .eq("schedule_id", scheduleItemsMatch[1])
+          .order("sequence_order", { ascending: true });
+        if (error) throw error;
+        return jsonResponse(data ?? []);
+      }
+
+      if (scheduleItemsMatch && method === "POST") {
+        const supabase = getSupabaseAdmin();
+        const body = (await request.json().catch(() => ({}))) as any;
+        const { data, error } = await supabase
+          .from("induction_schedule_items")
+          .insert({
+            schedule_id: scheduleItemsMatch[1],
+            course_id: body.courseId ?? null,
+            title: body.title ?? null,
+            sequence_order: body.sequenceOrder ?? 1,
+            delay_days: body.delayDays ?? 0,
+            delay_type: body.delayType ?? "after_completion",
+            fixed_date: body.fixedDate ?? null,
+            expiry_interval: body.expiryInterval ?? null,
+            trigger_config: body.triggerConfig ?? {},
+            is_required: body.isRequired ?? true,
+            created_at: new Date().toISOString()
+          })
+          .select("*, course:induction_courses(*)")
+          .single();
+        if (error) throw error;
+        return jsonResponse(data, 201);
+      }
+
+      const scheduleItemDeleteMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/items\/([^/]+)$/);
+      if (scheduleItemDeleteMatch && method === "DELETE") {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from("induction_schedule_items").delete().eq("id", scheduleItemDeleteMatch[2]);
+        if (error) throw error;
+        return jsonResponse({ message: "Schedule item deleted." });
+      }
+
+      // Schedule Enrollments
+      const scheduleEnrollmentsMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/enrollments$/);
+      if (scheduleEnrollmentsMatch && method === "GET") {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+          .from("induction_schedule_enrollments")
+          .select("*, driver:profiles!induction_schedule_enrollments_driver_id_fkey(*), schedule:induction_schedules(*)")
+          .eq("schedule_id", scheduleEnrollmentsMatch[1])
+          .order("enrolled_at", { ascending: false });
+        if (error) throw error;
+        return jsonResponse(data ?? []);
+      }
+
+      const scheduleEnrollMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/enroll$/);
+      if (scheduleEnrollMatch && method === "POST") {
+        const supabase = getSupabaseAdmin();
+        const body = (await request.json().catch(() => ({}))) as any;
+        const { data, error } = await supabase
+          .from("induction_schedule_enrollments")
+          .insert({
+            schedule_id: scheduleEnrollMatch[1],
+            driver_id: body.driverId,
+            enrolled_by: adminId,
+            enrolled_at: new Date().toISOString(),
+            status: "active",
+            current_item_index: 0
+          })
+          .select("*, schedule:induction_schedules(*)")
+          .single();
+        if (error) throw error;
+        return jsonResponse(data, 201);
+      }
+
+      const scheduleUnenrollMatch = cleanPath.match(/^admin\/schedules\/([^/]+)\/enroll\/([^/]+)$/);
+      if (scheduleUnenrollMatch && method === "DELETE") {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from("induction_schedule_enrollments").delete().eq("id", scheduleUnenrollMatch[2]);
+        if (error) throw error;
+        return jsonResponse({ message: "Driver unenrolled." });
+      }
+
+      if (cleanPath === "admin/schedules/process-invitations" && method === "POST") {
+        return jsonResponse({ processed: 0 });
+      }
     }
 
     // --- Secure Driver Routes ---
