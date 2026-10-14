@@ -937,7 +937,7 @@ async function handleSubmitQuiz(userId: string, request: Request): Promise<Respo
 
 async function handleIssueCertificate(userId: string, request?: Request): Promise<Response> {
   const supabase = getSupabaseAdmin();
-  const reqOrigin = request ? new URL(request.url).origin : (APP_URL || "https://driver-induction-platform.vercel.app");
+  const reqOrigin = request ? new URL(request.url, APP_URL).origin : (APP_URL || "https://driver-induction-platform.vercel.app");
 
   const { data: progress } = await supabase
     .from("induction_progress")
@@ -1078,7 +1078,7 @@ async function handleVerifyCertificate(code: string, request: Request): Promise<
     .single();
   if (profileError) throw profileError;
 
-  const reqOrigin = request ? new URL(request.url).origin : (APP_URL || "https://driver-induction-platform.vercel.app");
+  const reqOrigin = request ? new URL(request.url, APP_URL).origin : (APP_URL || "https://driver-induction-platform.vercel.app");
   const payload = {
     verified: true,
     organizationName: ORGANIZATION_NAME,
@@ -1617,7 +1617,10 @@ async function handleNotify(request: Request, adminId: string): Promise<Response
   return jsonResponse({ message: "Notification dispatched" });
 }
 
-// --- Main entry point (Vercel Web Standard function) ---
+// --- Main entry point (Vercel Web Standard / Edge function) ---
+export const config = {
+  runtime: "edge"
+};
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method === "OPTIONS") {
@@ -1627,7 +1630,7 @@ export default async function handler(request: Request): Promise<Response> {
   const configError = requireConfig();
   if (configError) return configError;
 
-  const url = new URL(request.url);
+  const url = new URL(request.url, APP_URL);
   const rawPath = url.pathname.replace(/^\/+/, ""); // e.g. "api/induction/step"
   const cleanPath = rawPath.replace(/^api\//, "").replace(/\/+$/, "");
   const method = request.method;
