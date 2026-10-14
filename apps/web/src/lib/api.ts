@@ -1725,27 +1725,26 @@ export const api = {
       .eq("user_id", driverId);
 
     // 4. Reset induction progress
-    await supabase.from("induction_progress")
-      .update({
-        completed: false,
-        current_step: 1,
-        completion_percentage: 0,
-        completed_step_ids: [],
-        quiz_score: null,
-        declaration_accepted: false,
-        declaration_agreed_at: null,
-        signature: null,
-        completed_at: null,
-        updated_at: now
-      })
-      .eq("user_id", driverId);
+    await supabase.from("induction_progress").delete().eq("user_id", driverId);
+    await supabase.from("induction_progress").insert({
+      user_id: driverId,
+      current_step: 1,
+      completion_percentage: 0,
+      completed: false,
+      completed_step_ids: [],
+      quiz_score: null,
+      declaration_accepted: false,
+      declaration_agreed_at: null,
+      signature: null,
+      completed_at: null,
+      updated_at: now
+    });
 
     // 5. Audit log
     if (session.user?.id) {
       await supabase.from("audit_logs").insert({
         user_id: session.user.id,
         action: "admin_induction_revoked",
-        entity_id: driverId,
         metadata: { driverId, reason, certificateId, fallback: true },
         created_at: now
       });

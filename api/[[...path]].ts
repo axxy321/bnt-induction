@@ -1527,21 +1527,20 @@ async function handleRevokeInduction(request: Request, adminId: string, driverId
     .eq("user_id", driverId);
 
   // 7. Reset induction progress
-  await supabase
-    .from("induction_progress")
-    .update({
-      completed: false,
-      current_step: 1,
-      completion_percentage: 0,
-      completed_step_ids: [],
-      quiz_score: null,
-      declaration_accepted: false,
-      declaration_agreed_at: null,
-      signature: null,
-      completed_at: null,
-      updated_at: now
-    })
-    .eq("user_id", driverId);
+  await supabase.from("induction_progress").delete().eq("user_id", driverId);
+  await supabase.from("induction_progress").insert({
+    user_id: driverId,
+    current_step: 1,
+    completion_percentage: 0,
+    completed: false,
+    completed_step_ids: [],
+    quiz_score: null,
+    declaration_accepted: false,
+    declaration_agreed_at: null,
+    signature: null,
+    completed_at: null,
+    updated_at: now
+  });
 
   // 8. Audit log
   await logAuditEntry(adminId, "admin_induction_revoked", {
