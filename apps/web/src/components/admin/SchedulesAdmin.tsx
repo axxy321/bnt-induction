@@ -839,8 +839,8 @@ export function SchedulesAdmin() {
                               <Clock className="w-3 h-3" />
                               {item.delayType === "fixed_date" && item.fixedDate
                                 ? `${t("schedules_item_delay_fixed_date")}: ${new Date(item.fixedDate).toLocaleDateString("en-AU")}`
-                                : `${t(DELAY_TYPE_LABELS[item.delayType])} · ${item.delayDays} ${item.delayDays === 1 ? "day" : "days"}`}
-                              {item.isRequired && <span style={{ marginLeft: "8px", fontWeight: 700 }}>· {t("schedules_item_required")}</span>}
+                                : `${t(DELAY_TYPE_LABELS[item.delayType] || "schedules_item_delay_after_completion")} · ${item.delayDays ?? (item as any).delay_days ?? 0} ${(item.delayDays ?? (item as any).delay_days ?? 0) === 1 ? "day" : "days"}`}
+                              {(item.isRequired ?? (item as any).is_required) && <span style={{ marginLeft: "8px", fontWeight: 700 }}>· {t("schedules_item_required")}</span>}
                             </span>
                           </div>
                         </div>

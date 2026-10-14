@@ -3208,10 +3208,55 @@ export const getExpiringDocumentsReport = (session: SessionState) => adminJson<E
 export const getDocumentsForApprovalReport = (session: SessionState) => adminJson<DocumentApprovalReport[]>(session, "reports/documents-for-approval");
 export const getScheduledStatusReport = (session: SessionState) => adminJson<ScheduledStatusReport[]>(session, "reports/scheduled-status");
 
+function mapScheduleRow(row: any): InductionSchedule {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? "",
+    isActive: row.is_active ?? row.isActive ?? true,
+    createdBy: row.created_by ?? row.createdBy ?? null,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt
+  };
+}
+
+function mapScheduleItemRow(row: any): InductionScheduleItem {
+  return {
+    id: row.id,
+    scheduleId: row.schedule_id ?? row.scheduleId,
+    courseId: row.course_id ?? row.courseId ?? null,
+    title: row.title ?? "",
+    sequenceOrder: row.sequence_order ?? row.sequenceOrder ?? 1,
+    delayDays: typeof row.delay_days === "number" ? row.delay_days : (typeof row.delayDays === "number" ? row.delayDays : 0),
+    delayType: row.delay_type ?? row.delayType ?? "after_completion",
+    fixedDate: row.fixed_date ?? row.fixedDate ?? null,
+    expiryInterval: row.expiry_interval ?? row.expiryInterval ?? null,
+    isRequired: row.is_required ?? row.isRequired ?? true,
+    createdAt: row.created_at ?? row.createdAt ?? new Date().toISOString(),
+    updatedAt: row.updated_at ?? row.updatedAt ?? row.created_at ?? new Date().toISOString(),
+    course: row.course
+  };
+}
+
+function mapScheduleEnrollmentRow(row: any): InductionScheduleEnrollment {
+  return {
+    id: row.id,
+    scheduleId: row.schedule_id ?? row.scheduleId,
+    driverId: row.driver_id ?? row.driverId,
+    enrolledBy: row.enrolled_by ?? row.enrolledBy ?? null,
+    enrolledAt: row.enrolled_at ?? row.enrolledAt,
+    status: row.status ?? "active",
+    currentItemIndex: row.current_item_index ?? row.currentItemIndex ?? 0,
+    completedAt: row.completed_at ?? row.completedAt ?? null,
+    driver: row.driver,
+    schedule: row.schedule ? mapScheduleRow(row.schedule) : undefined
+  };
+}
+
 export const getInductionSchedules = async (session: SessionState): Promise<InductionSchedule[]> => {
   try {
     const res = await adminJson<InductionSchedule[]>(session, "schedules");
-    if (Array.isArray(res)) return res;
+    if (Array.isArray(res)) return res.map(mapScheduleRow);
   } catch (err) {
     console.warn("API schedules fetch failed, falling back to direct Supabase query:", err);
   }
@@ -3220,7 +3265,7 @@ export const getInductionSchedules = async (session: SessionState): Promise<Indu
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data as InductionSchedule[]) ?? [];
+  return ((data ?? []) as any[]).map(mapScheduleRow);
 };
 
 export const createInductionSchedule = async (session: SessionState, input: Partial<InductionSchedule>): Promise<InductionSchedule> => {
@@ -3276,7 +3321,7 @@ export const deleteInductionSchedule = async (session: SessionState, id: string)
 export const getScheduleItems = async (session: SessionState, id: string): Promise<InductionScheduleItem[]> => {
   try {
     const res = await adminJson<InductionScheduleItem[]>(session, `schedules/${id}/items`);
-    if (Array.isArray(res)) return res;
+    if (Array.isArray(res)) return res.map(mapScheduleItemRow);
   } catch (err) {
     console.warn("API schedule items fetch failed, falling back to direct Supabase query:", err);
   }
@@ -3286,12 +3331,13 @@ export const getScheduleItems = async (session: SessionState, id: string): Promi
     .eq("schedule_id", id)
     .order("sequence_order", { ascending: true });
   if (error) throw error;
-  return (data as InductionScheduleItem[]) ?? [];
+  return ((data ?? []) as any[]).map(mapScheduleItemRow);
 };
 
 export const addScheduleItem = async (session: SessionState, id: string, input: any): Promise<InductionScheduleItem> => {
   try {
-    return await adminJson<InductionScheduleItem>(session, `schedules/${id}/items`, { method: "POST", body: JSON.stringify(input) });
+    const res = await adminJson<InductionScheduleItem>(session, `schedules/${id}/items`, { method: "POST", body: JSON.stringify(input) });
+    return mapScheduleItemRow(res);
   } catch (err) {
     console.warn("API add schedule item failed, falling back to direct Supabase query:", err);
   }
@@ -3313,7 +3359,7 @@ export const addScheduleItem = async (session: SessionState, id: string, input: 
     .select("*, course:induction_courses(*)")
     .single();
   if (error) throw error;
-  return data as InductionScheduleItem;
+  return mapScheduleItemRow(data);
 };
 
 export const deleteScheduleItem = async (session: SessionState, scheduleId: string, itemId: string): Promise<void> => {
@@ -3330,7 +3376,7 @@ export const deleteScheduleItem = async (session: SessionState, scheduleId: stri
 export const getScheduleEnrollments = async (session: SessionState, id: string): Promise<InductionScheduleEnrollment[]> => {
   try {
     const res = await adminJson<InductionScheduleEnrollment[]>(session, `schedules/${id}/enrollments`);
-    if (Array.isArray(res)) return res;
+    if (Array.isArray(res)) return res.map(mapScheduleEnrollmentRow);
   } catch (err) {
     console.warn("API schedule enrollments fetch failed, falling back to direct Supabase query:", err);
   }
@@ -3340,7 +3386,7 @@ export const getScheduleEnrollments = async (session: SessionState, id: string):
     .eq("schedule_id", id)
     .order("enrolled_at", { ascending: false });
   if (error) throw error;
-  return (data as InductionScheduleEnrollment[]) ?? [];
+  return ((data ?? []) as any[]).map(mapScheduleEnrollmentRow);
 };
 
 export const enrollDriverInSchedule = async (session: SessionState, id: string, driverId: string): Promise<InductionScheduleEnrollment> => {
