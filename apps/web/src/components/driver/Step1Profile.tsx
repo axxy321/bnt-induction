@@ -325,6 +325,29 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
           {errors.address && <span style={{ color: "#ef4444", fontSize: "0.75rem" }}>{errors.address}</span>}
         </div>
 
+        {Object.keys(errors).length > 0 && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: "16px",
+              padding: "10px 14px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: "8px",
+              color: "#991b1b",
+              fontSize: "0.82rem",
+              fontWeight: 500
+            }}
+          >
+            Please correct the highlighted field(s) above to continue:
+            <ul style={{ margin: "6px 0 0", paddingLeft: "18px" }}>
+              {Object.entries(errors).map(([key, msg]) => (
+                <li key={key}>{msg}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button
             type="submit"
