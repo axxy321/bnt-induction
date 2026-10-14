@@ -3,11 +3,10 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "apps/web/dist",
   "framework": "vite",
-  "functions": {
-    "api/*": { "runtime": "nodejs20.x" }
-  },
+
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
