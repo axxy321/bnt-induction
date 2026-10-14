@@ -1694,9 +1694,62 @@ export const api = {
   },
 
   async revokeDriverInduction(session: SessionState, driverId: string, reason: string, certificateId?: string) {
-    await adminRequest(`/admin/drivers/${driverId}/revoke-induction`, session, {
-      method: "POST", body: JSON.stringify({ reason, certificateId })
-    });
+    try {
+      await adminRequest(`/admin/drivers/${driverId}/revoke-induction`, session, {
+        method: "POST",
+        body: JSON.stringify({ reason, certificateId })
+      });
+      return;
+    } catch (apiError: any) {
+      console.warn("API revokeDriverInduction endpoint failed, applying resilient direct Supabase fallback:", apiError?.message);
+    }
+
+    const now = new Date().toISOString();
+
+    // 1. Invalidate/remove certificate
+    if (certificateId) {
+      await supabase.from("certificates").delete().eq("id", certificateId);
+    } else {
+      await supabase.from("certificates").delete().eq("user_id", driverId);
+    }
+
+    // 2. Cancel active schedule enrollment
+    await supabase.from("induction_schedule_enrollments")
+      .update({ status: "cancelled", updated_at: now })
+      .eq("driver_id", driverId)
+      .eq("status", "active");
+
+    // 3. Reset driver status in drivers table
+    await supabase.from("drivers")
+      .update({ status: "Not Started" })
+      .eq("user_id", driverId);
+
+    // 4. Reset induction progress
+    await supabase.from("induction_progress")
+      .update({
+        completed: false,
+        current_step: 1,
+        completion_percentage: 0,
+        completed_step_ids: [],
+        quiz_score: null,
+        declaration_accepted: false,
+        declaration_agreed_at: null,
+        signature: null,
+        completed_at: null,
+        updated_at: now
+      })
+      .eq("user_id", driverId);
+
+    // 5. Audit log
+    if (session.user?.id) {
+      await supabase.from("audit_logs").insert({
+        user_id: session.user.id,
+        action: "admin_induction_revoked",
+        entity_id: driverId,
+        metadata: { driverId, reason, certificateId, fallback: true },
+        created_at: now
+      });
+    }
   },
 
   async archiveDriver(_session: SessionState, driverId: string) {

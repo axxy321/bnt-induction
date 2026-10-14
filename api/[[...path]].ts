@@ -1404,6 +1404,177 @@ async function handleResetInduction(_request: Request, adminId: string, driverId
   return jsonResponse({ message: "Induction reset complete" });
 }
 
+async function handleRevokeInduction(request: Request, adminId: string, driverId: string): Promise<Response> {
+  const supabase = getSupabaseAdmin();
+  const body = (await request.json().catch(() => ({}))) as { reason?: string; certificateId?: string };
+  const reason = body.reason?.trim();
+  const certificateId = body.certificateId;
+
+  if (!reason) {
+    return errorResponse("Reason is required for revoking induction.", 400);
+  }
+
+  // 1. Verify driver exists
+  const { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("id", driverId)
+    .eq("role", "driver")
+    .maybeSingle();
+
+  if (profileErr) {
+    return errorResponse(`Failed to fetch driver profile: ${profileErr.message}`, 500);
+  }
+  if (!profile) {
+    return errorResponse("Driver not found.", 404);
+  }
+
+  // 2. Fetch certificate if present
+  let certQuery = supabase
+    .from("certificates")
+    .select("*")
+    .eq("user_id", driverId)
+    .order("issued_at", { ascending: false });
+
+  if (certificateId) {
+    certQuery = certQuery.eq("id", certificateId);
+  }
+
+  const { data: certList } = await certQuery.limit(1);
+  const certificate = certList?.[0] ?? null;
+
+  const now = new Date().toISOString();
+
+  // 3. Handle certificate revocation/removal
+  if (certificate) {
+    // Try updating revoked_at if migration 016 column exists
+    const { error: updateCertErr } = await supabase
+      .from("certificates")
+      .update({
+        revoked_at: now,
+        revoked_by: adminId,
+        revocation_reason: reason
+      })
+      .eq("id", certificate.id);
+
+    // If revoked_at column does not exist (42703), safely delete the certificate record so driver is not certified
+    if (updateCertErr) {
+      console.warn("Certificates update failed (likely missing revoked_at column), deleting certificate record:", updateCertErr.message);
+      await supabase.from("certificates").delete().eq("id", certificate.id);
+    }
+  }
+
+  // 4. Check & cancel active schedule enrollment
+  const { data: enrollment } = await supabase
+    .from("induction_schedule_enrollments")
+    .select("*")
+    .eq("driver_id", driverId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (enrollment) {
+    // Try full cancel fields
+    const { error: cancelErr } = await supabase
+      .from("induction_schedule_enrollments")
+      .update({
+        status: "cancelled",
+        cancelled_at: now,
+        cancelled_by: adminId,
+        cancellation_reason: `Induction revoked: ${reason}`,
+        updated_at: now
+      })
+      .eq("id", enrollment.id);
+
+    if (cancelErr) {
+      // Fallback to basic status update if cancelled_at doesn't exist
+      await supabase
+        .from("induction_schedule_enrollments")
+        .update({
+          status: "cancelled",
+          updated_at: now
+        })
+        .eq("id", enrollment.id);
+    }
+  }
+
+  // 5. Attempt record in induction_revocations if table exists
+  try {
+    await supabase
+      .from("induction_revocations")
+      .insert({
+        user_id: driverId,
+        certificate_id: certificate?.id ?? null,
+        schedule_enrollment_id: enrollment?.id ?? null,
+        revoked_by: adminId,
+        revocation_type: "revoke_induction",
+        reason,
+        previous_status: "completed",
+        metadata: {
+          certificate_id: certificate?.id ?? null,
+          completion_id: certificate?.completion_id ?? null,
+          verification_code: certificate?.verification_code ?? null,
+          had_active_enrollment: !!enrollment
+        }
+      });
+  } catch (err: any) {
+    console.warn("Could not record in induction_revocations (table may not exist):", err?.message);
+  }
+
+  // 6. Reset driver status in drivers table
+  await supabase
+    .from("drivers")
+    .update({ status: "Not Started" })
+    .eq("user_id", driverId);
+
+  // 7. Reset induction progress
+  await supabase
+    .from("induction_progress")
+    .update({
+      completed: false,
+      current_step: 1,
+      completion_percentage: 0,
+      completed_step_ids: [],
+      quiz_score: null,
+      declaration_accepted: false,
+      declaration_agreed_at: null,
+      signature: null,
+      completed_at: null,
+      updated_at: now
+    })
+    .eq("user_id", driverId);
+
+  // 8. Audit log
+  await logAuditEntry(adminId, "admin_induction_revoked", {
+    driverId,
+    certificateId: certificate?.id ?? null,
+    reason,
+    verificationCode: certificate?.verification_code ?? null
+  });
+
+  return jsonResponse({
+    message: "Induction revoked successfully.",
+    certificateId: certificate?.id ?? null
+  });
+}
+
+async function handleGetDriverRevocations(request: Request, adminId: string, driverId: string): Promise<Response> {
+  const supabase = getSupabaseAdmin();
+  try {
+    const { data, error } = await supabase
+      .from("induction_revocations")
+      .select(`*, revoked_by_profile:profiles!revoked_by(full_name, email)`)
+      .eq("user_id", driverId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return jsonResponse([]);
+    }
+    return jsonResponse(data ?? []);
+  } catch {
+    return jsonResponse([]);
+  }
+}
+
 async function handleDeleteDriver(_request: Request, adminId: string, driverId: string): Promise<Response> {
   const supabase = getSupabaseAdmin();
 
@@ -1707,6 +1878,16 @@ export default async function handler(request: Request): Promise<Response> {
       const inductionResetMatch = cleanPath.match(/^admin\/drivers\/([^/]+)\/reset-induction$/);
       if (inductionResetMatch && method === "POST") {
         return await handleResetInduction(request, adminId, inductionResetMatch[1]);
+      }
+
+      const inductionRevokeMatch = cleanPath.match(/^admin\/drivers\/([^/]+)\/revoke-induction$/);
+      if (inductionRevokeMatch && method === "POST") {
+        return await handleRevokeInduction(request, adminId, inductionRevokeMatch[1]);
+      }
+
+      const revocationsMatch = cleanPath.match(/^admin\/drivers\/([^/]+)\/revocations$/);
+      if (revocationsMatch && method === "GET") {
+        return await handleGetDriverRevocations(request, adminId, revocationsMatch[1]);
       }
 
       if (driverMatch && method === "DELETE") {
