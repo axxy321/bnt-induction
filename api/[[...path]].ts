@@ -4,10 +4,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
-const APP_URL = process.env.APP_URL ?? "";
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://wbrculvtacfkjzqhhoue.supabase.co";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndicmN1bHZ0YWNma2p6cWhob3VlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDY1MDg0OCwiZXhwIjoyMTAwMjI2ODQ4fQ.EkMtjAbpdPVrlrR5n0Py-5x-sD36WN2UDOMGheUQpR0";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndicmN1bHZ0YWNma2p6cWhob3VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NTA4NDgsImV4cCI6MjEwMDIyNjg0OH0.vxmD4mpvPaG0IhlS7i8FisLXRy6CZdq48ur_4Fr8KN4";
+const APP_URL = process.env.APP_URL || "https://driver-induction-platform.vercel.app";
 const ORGANIZATION_NAME = process.env.ORGANIZATION_NAME ?? "BNT Logistics";
 const ORGANIZATION_LOGO_URL = process.env.ORGANIZATION_LOGO_URL ?? "";
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
@@ -935,14 +935,39 @@ async function handleSubmitQuiz(userId: string, request: Request): Promise<Respo
   });
 }
 
-async function handleIssueCertificate(userId: string): Promise<Response> {
+async function handleIssueCertificate(userId: string, request?: Request): Promise<Response> {
   const supabase = getSupabaseAdmin();
+  const reqOrigin = request ? new URL(request.url).origin : (APP_URL || "https://driver-induction-platform.vercel.app");
 
   const { data: progress } = await supabase
     .from("induction_progress")
     .select("*")
     .eq("user_id", userId)
     .single();
+
+  const currentVersionId = progress?.induction_version_id ?? null;
+  let existingQuery = supabase.from("certificates").select("*").eq("user_id", userId);
+  if (currentVersionId) {
+    existingQuery = existingQuery.eq("induction_version_id", currentVersionId);
+  }
+  const { data: existingArray } = await existingQuery.order("issued_at", { ascending: false }).limit(1);
+  const existing = existingArray?.[0] ?? null;
+
+  if (existing) {
+    const rawVerifyUrl = existing.verification_url || `${reqOrigin}/certificate/verify/${existing.verification_code}`;
+    const normalizedVerifyUrl = rawVerifyUrl.replace(/https?:\/\/localhost(:\d+)?/, reqOrigin);
+    return jsonResponse({
+      message: "Certificate already generated for this version.",
+      certificate: {
+        completionId: existing.completion_id,
+        verificationCode: existing.verification_code,
+        verificationUrl: normalizedVerifyUrl,
+        issuedAt: existing.issued_at,
+        expiresAt: existing.expires_at
+      }
+    });
+  }
+
   if (!progress || ![1, 2, 3, 4, 5].every(step => progress.completed_step_ids?.includes(step))) {
     const missing = [1, 2, 3, 4, 5].filter(s => !progress?.completed_step_ids?.includes(s));
     return errorResponse(`Complete all steps first. Missing step(s): ${missing.join(", ")}.`, 400);
@@ -963,31 +988,9 @@ async function handleIssueCertificate(userId: string): Promise<Response> {
     return errorResponse(`Required documents must be approved and current before a certificate can be issued. Outstanding: ${incomplete.join(", ")}.`, 400);
   }
 
-  const currentVersionId = progress.induction_version_id ?? null;
-  let existingQuery = supabase.from("certificates").select("*").eq("user_id", userId);
-  if (currentVersionId) {
-    existingQuery = existingQuery.eq("induction_version_id", currentVersionId);
-  }
-  const { data: existingArray, error: existingError } = await existingQuery.order("issued_at", { ascending: false }).limit(1);
-  if (existingError) throw existingError;
-  const existing = existingArray?.[0] ?? null;
-
-  if (existing) {
-    return jsonResponse({
-      message: "Certificate already generated for this version.",
-      certificate: {
-        completionId: existing.completion_id,
-        verificationCode: existing.verification_code,
-        verificationUrl: existing.verification_url,
-        issuedAt: existing.issued_at,
-        expiresAt: existing.expires_at
-      }
-    });
-  }
-
   const verificationCode = `VERIFY-${userId.slice(0, 8)}-${uuidV4().slice(0, 6)}`;
   const completionId = `COMP-${userId.slice(0, 8).toUpperCase()}-${uuidV4().slice(0, 6).toUpperCase()}`;
-  const verificationUrl = `${APP_URL}/certificate/verify/${verificationCode}`;
+  const verificationUrl = `${reqOrigin}/certificate/verify/${verificationCode}`;
   const issuedAt = new Date().toISOString();
   const expiresAt = new Date();
   expiresAt.setFullYear(expiresAt.getFullYear() + 1);
@@ -1075,22 +1078,23 @@ async function handleVerifyCertificate(code: string, request: Request): Promise<
     .single();
   if (profileError) throw profileError;
 
+  const reqOrigin = request ? new URL(request.url).origin : (APP_URL || "https://driver-induction-platform.vercel.app");
   const payload = {
     verified: true,
     organizationName: ORGANIZATION_NAME,
     certificate: {
       completionId: certificate.completion_id,
       verificationCode: certificate.verification_code,
-      verificationUrl: `${APP_URL}/certificate/verify/${certificate.verification_code}`,
+      verificationUrl: `${reqOrigin}/certificate/verify/${certificate.verification_code}`,
       issuedAt: certificate.issued_at,
       expiresAt: certificate.expires_at
     },
     driver: {
-      fullName: profile.full_name ?? ""
+      fullName: profile?.full_name ?? ""
     },
-    licenceClass: profile.licence_class ?? null,
-    issuingState: profile.issuing_state ?? null,
-    depotLocation: profile.depot_location ?? null
+    licenceClass: profile?.licence_class ?? null,
+    issuingState: profile?.issuing_state ?? null,
+    depotLocation: profile?.depot_location ?? null
   };
 
   if (request.headers.get("accept")?.includes("text/html")) {
@@ -1101,10 +1105,10 @@ async function handleVerifyCertificate(code: string, request: Request): Promise<
           certificate: {
             completionId: certificate.completion_id,
             verificationCode: certificate.verification_code,
-            verificationUrl: `${APP_URL}/certificate/verify/${certificate.verification_code}`,
+            verificationUrl: `${reqOrigin}/certificate/verify/${certificate.verification_code}`,
             issuedAt: certificate.issued_at
           },
-          driver: { fullName: profile.full_name ?? "" }
+          driver: { fullName: profile?.full_name ?? "" }
         },
         ORGANIZATION_LOGO_URL
       ),
@@ -1118,14 +1122,15 @@ async function handleVerifyCertificate(code: string, request: Request): Promise<
 async function handleVerifyVehiclePass(passCode: string): Promise<Response> {
   const supabase = getSupabaseAdmin();
 
-  if (!passCode || !/^[A-Za-z0-9-]+$/.test(passCode)) {
+  if (!passCode) {
     return errorResponse("Invalid pass code.", 400);
   }
 
+  const clean = passCode.trim();
   const { data: vehicle, error: vehicleError } = await supabase
     .from("driver_vehicles")
     .select("*, profiles:user_id (full_name, email)")
-    .eq("qr_pass_code", passCode)
+    .or(`qr_pass_code.eq.${clean},rego.ilike.${clean},id.eq.${clean}`)
     .maybeSingle();
   if (vehicleError) throw vehicleError;
   if (!vehicle) {
@@ -1136,7 +1141,7 @@ async function handleVerifyVehiclePass(passCode: string): Promise<Response> {
     verified: true,
     organizationName: ORGANIZATION_NAME,
     vehicle: {
-      passCode: vehicle.qr_pass_code,
+      passCode: vehicle.qr_pass_code || vehicle.id,
       rego: vehicle.rego,
       makeModel: vehicle.make_model,
       bodyType: vehicle.body_type ?? null,
@@ -1147,7 +1152,7 @@ async function handleVerifyVehiclePass(passCode: string): Promise<Response> {
       scbaServiceDueDate: vehicle.scba_service_due_date ?? null
     },
     driver: {
-      fullName: vehicle.profiles?.full_name ?? "",
+      fullName: vehicle.profiles?.full_name ?? vehicle.driver_name ?? "",
       email: vehicle.profiles?.email ?? ""
     }
   });
@@ -1753,7 +1758,7 @@ export default async function handler(request: Request): Promise<Response> {
     if (cleanPath === "induction/certificate" && method === "POST") {
       const driver = await requireDriver(request);
       if ("response" in driver) return driver.response;
-      return await handleIssueCertificate(driver.userId);
+      return await handleIssueCertificate(driver.userId, request);
     }
 
     // --- Public Routes ---

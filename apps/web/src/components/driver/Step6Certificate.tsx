@@ -166,32 +166,35 @@ export function Step6Certificate({
               ) : null;
             })()}
 
-          {certificate.verificationUrl && (
-            <div
-              style={{
-                marginTop: "16px",
-                paddingTop: "14px",
-                borderTop: "1px solid var(--border, #cbd5e1)"
-              }}
-            >
-              <span className="muted" style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px" }}>
-                {t("s6_verify_this")}
-              </span>
-              <a
-                href={certificate.verificationUrl}
-                target="_blank"
-                rel="noreferrer"
+          {certificate.verificationUrl && (() => {
+            const displayUrl = certificate.verificationUrl.replace(/https?:\/\/localhost(:\d+)?/, window.location.origin);
+            return (
+              <div
                 style={{
-                  color: "#2563eb",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  wordBreak: "break-all"
+                  marginTop: "16px",
+                  paddingTop: "14px",
+                  borderTop: "1px solid var(--border, #cbd5e1)"
                 }}
               >
-                {certificate.verificationUrl}
-              </a>
-            </div>
-          )}
+                <span className="muted" style={{ display: "block", fontSize: "0.75rem", marginBottom: "4px" }}>
+                  {t("s6_verify_this")}
+                </span>
+                <a
+                  href={displayUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    color: "#2563eb",
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    wordBreak: "break-all"
+                  }}
+                >
+                  {displayUrl}
+                </a>
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -51,11 +51,11 @@ export default function VehicleVerificationPage({ code }: { code: string }) {
         setDetail(result);
       } catch (err) {
         if (cancelled) return;
-        setError(
-          err instanceof Error
-            ? err.message
-            : t("vvp_err_service")
-        );
+        const rawMsg = err instanceof Error ? err.message : t("vvp_err_service");
+        const cleanMsg = rawMsg.includes("<") || rawMsg.includes("Unexpected token")
+          ? (t("vvp_err_default") || "Vehicle pass not found.")
+          : rawMsg;
+        setError(cleanMsg);
       } finally {
         if (!cancelled) setLoading(false);
       }

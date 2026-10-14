@@ -392,6 +392,24 @@ export function VideoPlayer({ src, onComplete, onStart, className = "", savedPos
               </div>
             )}
 
+            {!completed && (
+              <button
+                type="button"
+                onClick={() => void markCompleted()}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "8px",
+                  background: "rgba(37, 99, 235, 0.15)",
+                  border: "1px solid rgba(37, 99, 235, 0.35)",
+                  color: "#93c5fd",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  cursor: "pointer"
+                }}
+              >
+                Mark Video as Watched
+              </button>
+            )}
           </div>
           {completionError && (
             <p role="alert" style={{ color: "#fca5a5", fontSize: "0.82rem", margin: "12px 0 0" }}>

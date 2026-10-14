@@ -25,7 +25,7 @@ const learningContent = {
       "Document and report any pressure to compromise safety immediately to your company compliance officer or the NHVR Confidential Reporting Line."
     ],
     scenario: "Example: A dispatcher asks you to complete a 700km trip in 7 hours without rest. Under HVNL CoR, you must refuse the schedule, report the breach, and request a compliant trip plan.",
-    videoUrl: "https://www.youtube.com/embed/9VnOQLO8KLQ",
+    videoUrl: "https://www.youtube.com/embed/TpPTyqB37qU",
     videoDurationSeconds: 150
   },
   "Fatigue Management & Work Diary Rules": {
@@ -37,7 +37,7 @@ const learningContent = {
       "Never rely on caffeine, energy drinks, or open windows as a fatigue strategy. If you experience heavy eyelids, slow reaction times, or lane drifting, pull over safely and rest."
     ],
     scenario: "Example: You feel drowsy after 4 hours of night driving. Under NHVR rules, pull into a safe rest area immediately, log the break in your EWD, and sleep before continuing.",
-    videoUrl: "https://www.youtube.com/embed/7jZtJMxJR9k",
+    videoUrl: "https://www.youtube.com/embed/MMfj5RSmpsI",
     videoDurationSeconds: 180
   },
   "Load Restraint Guide 2018 Performance Standards": {
@@ -49,7 +49,7 @@ const learningContent = {
       "Inspect straps, chains, turnbuckles, dunnage, and lashings for wear, cuts, or strain. Recheck load security after the first 50km and following any emergency maneuver."
     ],
     scenario: "Example: Securing a 10-tonne steel coil requires tie-down or direct lashings rated to withstand at least 8 tonnes of forward force (0.8g) and 5 tonnes of lateral force (0.5g).",
-    videoUrl: "https://www.youtube.com/embed/rMjHN7SBqvU",
+    videoUrl: "https://www.youtube.com/embed/FeZcC6aVYq0",
     videoDurationSeconds: 160
   },
   "Mass, Dimension & Height Limits": {
@@ -61,7 +61,7 @@ const learningContent = {
       "Axle weight distribution is as critical as gross weight. Uneven lateral loading severely reduces vehicle rollover thresholds."
     ],
     scenario: "Example: Approaching an overpass marked at 4.2m with a 4.3m trailer. Stop prior to the bridge, verify clearance, and use designated heavy vehicle bypass routes.",
-    videoUrl: "https://www.youtube.com/embed/P8dJKrJSPNY",
+    videoUrl: "https://www.youtube.com/embed/DyeDVDuxBzU",
     videoDurationSeconds: 140
   },
   "Vehicle Checks & Defect Reporting (Major vs Minor)": {
@@ -73,7 +73,7 @@ const learningContent = {
       "Always verify that the previous shift's defect reports have been signed off by a qualified mechanic prior to departure."
     ],
     scenario: "Example: You hear an audible air leak near the trailer brake booster during your pre-start check. This is a Major Defect: tag out the vehicle key, notify maintenance, and do not drive.",
-    videoUrl: "https://www.youtube.com/embed/rg1t87nZdL8",
+    videoUrl: "https://www.youtube.com/embed/Dai2wYpiZ-E",
     videoDurationSeconds: 150
   },
   "Speed Limiters & Heavy Vehicle Road Rules": {
@@ -85,7 +85,7 @@ const learningContent = {
       "Schedule pressure is never a legal defense for speeding. Traffic delays must be managed through control room notification."
     ],
     scenario: "Example: Descending a steep grade marked with 'Trucks Must Use Low Gear'. Select low gear before starting downhill to utilize engine braking and prevent brake fade.",
-    videoUrl: "https://www.youtube.com/embed/pquJFjTSaGI",
+    videoUrl: "https://www.youtube.com/embed/5I6WbOiqTsM",
     videoDurationSeconds: 120
   },
   "Site Safety, Exclusion Zones & PPE": {
@@ -94,10 +94,10 @@ const learningContent = {
       "Mandatory PPE: High-visibility clothing (Class D/N), steel-cap safety boots, safety glasses, and hard hats in designated site areas.",
       "Maintain strict exclusion zones (minimum 3 metres) around operating forklifts, gantry cranes, and loading equipment.",
       "Maintain Three Points of Contact (two hands one foot, or two feet one hand) whenever mounting or dismounting the cab, trailer ladder, or catwalk.",
-      "Always perform a 360-degree walk-around or use a spotter before reversing heavy vehicle combinations in loading yards."
+      "Always perform a 360-degree walk-around or use a spotter before reversing heavy vehicle combinations in loading yards.",
     ],
     scenario: "Example: Dismounting your truck cab. Face the vehicle and keep three points of contact on handrails and steps. Never jump out of the cabin.",
-    videoUrl: "https://www.youtube.com/embed/yqY7jGFaLsY",
+    videoUrl: "https://www.youtube.com/embed/7R5IPoOpG9M",
     videoDurationSeconds: 130
   },
   "Incident Reporting & Safety Management System (SMS)": {
@@ -109,7 +109,7 @@ const learningContent = {
       "Keep a copy of the company Safety Policy and NHVR Driver Induction Confirmation in your vehicle cabin at all times."
     ],
     scenario: "Example: A strap snaps on a highway and freight shifts slightly without falling. Stop in a safe breakdown bay, apply emergency hazard lights, deploy warning triangles, rectify the load, and submit a near-miss report.",
-    videoUrl: "https://www.youtube.com/embed/V4fxfDDgBYw",
+    videoUrl: "https://www.youtube.com/embed/G8bC_SW2IAU",
     videoDurationSeconds: 140
   }
 };

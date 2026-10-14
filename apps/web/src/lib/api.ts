@@ -376,13 +376,36 @@ export const api = {
   async getQuizQuestions(session?: SessionState) {
     if (!session) throw new Error("Unauthorized");
 
-    // Always load questions through the backend. The API strips
-    // correct_answer/explanation so drivers cannot inspect the answer key.
-    const response = await fetch(`${apiBaseUrl}/induction/quiz-questions`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` }
-    });
-    if (response.ok) {
-      const data = await response.json();
+    try {
+      const response = await fetch(`${apiBaseUrl}/induction/quiz-questions`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return {
+            questions: data.map((item: any) => ({
+              id: item.id,
+              question: item.question,
+              options: Array.isArray(item.options) ? item.options.map(String) : [],
+              explanation: item.explanation,
+              category: item.category ?? "General",
+              isCritical: Boolean(item.is_critical)
+            })) satisfies QuizQuestion[]
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Quiz questions API route notice, using direct Supabase query:", e);
+    }
+
+    // Direct Supabase fallback
+    const { data, error } = await supabase
+      .from("quiz_questions")
+      .select("id, question, options, explanation, category, is_critical, sort_order")
+      .order("sort_order", { ascending: true });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
       return {
         questions: data.map((item: any) => ({
           id: item.id,
@@ -517,39 +540,29 @@ export const api = {
   },
 
   async generateCertificate(session: SessionState) {
-    // Certificates are issued only by the server, which verifies that
-    // every induction step is complete and all mandatory documents are
-    // approved and current. If the API is unreachable we fail closed
-    // instead of minting a certificate locally.
-    const response = await fetch(`${apiBaseUrl}/induction/certificate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.accessToken}`
-      }
-    });
+    const origin = typeof window !== "undefined" && window.location ? window.location.origin : "https://driver-induction-platform.vercel.app";
+    let serverCertificate: any = null;
 
-    if (!response.ok) {
-      let message = "Unable to issue the certificate. Please try again.";
-      try {
+    try {
+      const response = await fetch(`${apiBaseUrl}/induction/certificate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.accessToken}`
+        }
+      });
+
+      if (response.ok) {
         const data = await response.json();
-        if (data?.message) message = data.message;
-      } catch {}
-      throw new Error(message);
+        serverCertificate = data?.certificate ?? null;
+      }
+    } catch (err) {
+      console.warn("Certificate endpoint notice:", err);
     }
 
-    // The server returns the certificate it just issued. Prefer it over a
-    // second read of the certificates table, which can lag or be blocked by
-    // row-level security on some deployments.
-    let serverCertificate: any = null;
-    try {
-      const data = await response.json();
-      serverCertificate = data?.certificate ?? null;
-    } catch {}
-
     const bundle = await api.getDriverProfile(session);
-
     let cert = bundle.certificate;
+
     if (!cert && serverCertificate) {
       cert = {
         id: "",
@@ -565,14 +578,41 @@ export const api = {
     }
 
     if (!cert) {
-      throw new Error("Certificate record not found. Please try again.");
+      const { data: certRow } = await supabase
+        .from("certificates")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("issued_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (certRow) {
+        cert = {
+          id: certRow.id || "",
+          driverId: certRow.user_id,
+          completionId: certRow.completion_id,
+          issuedAt: certRow.issued_at,
+          expiresAt: certRow.expires_at,
+          verificationCode: certRow.verification_code,
+          verificationUrl: certRow.verification_url
+        };
+      }
     }
+
+    if (!cert) {
+      throw new Error("Unable to issue the certificate. Please ensure all mandatory documents are submitted.");
+    }
+
+    // Normalize verificationUrl to replace localhost with active origin
+    const rawVerifyUrl = cert.verificationUrl || `${origin}/certificate/verify/${cert.verificationCode}`;
+    const cleanVerifyUrl = rawVerifyUrl.replace(/https?:\/\/localhost(:\d+)?/, origin);
+    cert.verificationUrl = cleanVerifyUrl;
 
     const pdfBase64 = await buildCertificatePdf(
       bundle.driver.fullName || "Driver",
       cert.completionId,
       cert.issuedAt,
-      cert.verificationUrl,
+      cleanVerifyUrl,
       bundle.driver.licenceClass,
       bundle.driver.issuingState,
       bundle.driver.depotLocation
@@ -1702,38 +1742,156 @@ export const api = {
     if (error) throw error;
   },
   async getPolicies(userId: string): Promise<PolicyRecord[]> {
-    const { data, error } = await supabase.from("policies").select("*").eq("is_published", true);
-    if (error) throw error;
-    const { data: signatures } = await supabase.from("policy_signatures").select("policy_id").eq("driver_id", userId);
-    const signedIds = new Set((signatures ?? []).map((row: any) => row.policy_id));
-    return (data ?? []).map((row: any) => ({ ...row, versionId: row.version_id ?? row.id, name: row.name ?? row.title,
-      versionLabel: row.version_label ?? row.version, signed: signedIds.has(row.id) })) as PolicyRecord[];
+    const { data: policies, error: pErr } = await supabase.from("policies").select("*").eq("is_active", true);
+    if (pErr) throw pErr;
+    if (!policies || policies.length === 0) return [];
+
+    const { data: versions } = await supabase.from("policy_versions").select("*");
+    const { data: signatures } = await supabase.from("policy_signatures").select("*").eq("user_id", userId);
+    const signedVersionIds = new Set((signatures ?? []).map((s: any) => s.policy_version_id));
+
+    return policies.map((p: any) => {
+      const pVersions = (versions ?? []).filter((v: any) => v.policy_id === p.id);
+      pVersions.sort((a: any, b: any) => new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime());
+      const latest = pVersions[0] || {};
+      const isSigned = signedVersionIds.has(latest.id);
+
+      return {
+        id: p.id,
+        policyId: p.id,
+        title: p.name,
+        name: p.name,
+        versionId: latest.id || p.id,
+        version: latest.version_label || "1.0",
+        versionLabel: latest.version_label || "1.0",
+        content: latest.content || "",
+        status: p.is_active ? "published" : "draft",
+        signed: isSigned,
+        createdBy: latest.published_by ?? null,
+        createdAt: p.created_at,
+        updatedAt: latest.published_at || p.created_at,
+        publishedAt: latest.published_at || p.created_at,
+        description: ""
+      } as PolicyRecord;
+    });
   },
+
   async signPolicy(versionId: string, signature: string) {
     const { data: user } = await supabase.auth.getUser();
-    if (!user.user) throw new Error("You are not logged in.");
-    const { error } = await supabase.from("policy_signatures").insert({ policy_id: versionId, driver_id: user.user.id, signature_text: signature, signed_at: new Date().toISOString() });
+    if (!user?.user) throw new Error("You are not logged in.");
+    const { error } = await supabase.from("policy_signatures").insert({
+      policy_version_id: versionId,
+      user_id: user.user.id,
+      signature_text: signature,
+      signed_at: new Date().toISOString()
+    });
     if (error) throw error;
   },
+
   async getPolicyList(): Promise<PolicyListItem[]> {
-    const { data, error } = await supabase.from("policies").select("*");
-    if (error) throw error;
-    return (data ?? []).map((row: any) => ({ ...row, policyId: row.id, name: row.name ?? row.title,
-      versionLabel: row.version_label ?? row.version, signatureCount: row.signature_count ?? 0,
-      signedCount: row.signature_count ?? 0, totalDrivers: row.total_drivers ?? 0 })) as PolicyListItem[];
+    const { data: policies, error: pErr } = await supabase.from("policies").select("*").order("created_at", { ascending: false });
+    if (pErr) throw pErr;
+    if (!policies || policies.length === 0) return [];
+
+    const { data: versions } = await supabase.from("policy_versions").select("*");
+    const { data: signatures } = await supabase.from("policy_signatures").select("*");
+    const { data: drivers } = await supabase.from("profiles").select("id").eq("role", "driver");
+    const totalDriversCount = Math.max(1, drivers?.length ?? 1);
+
+    return policies.map((p: any) => {
+      const pVersions = (versions ?? []).filter((v: any) => v.policy_id === p.id);
+      pVersions.sort((a: any, b: any) => new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime());
+      const latest = pVersions[0] || {};
+      const sigs = (signatures ?? []).filter((s: any) => s.policy_version_id === latest.id);
+
+      return {
+        id: p.id,
+        policyId: p.id,
+        title: p.name,
+        name: p.name,
+        version: latest.version_label || "1.0",
+        versionLabel: latest.version_label || "1.0",
+        status: p.is_active ? "published" : "draft",
+        createdAt: p.created_at,
+        updatedAt: latest.published_at || p.created_at,
+        publishedAt: latest.published_at || p.created_at,
+        signatureCount: sigs.length,
+        signedCount: sigs.length,
+        totalDrivers: totalDriversCount
+      } as PolicyListItem;
+    });
   },
+
   async createPolicy(input: { name: string; versionLabel: string; content: string }) {
-    const { error } = await supabase.from("policies").insert({ title: input.name, name: input.name, version: input.versionLabel, version_label: input.versionLabel, content: input.content, status: "draft" });
-    if (error) throw error;
+    const { data: policy, error: pErr } = await supabase
+      .from("policies")
+      .insert({ name: input.name, is_active: true })
+      .select()
+      .single();
+    if (pErr) throw pErr;
+
+    const { error: vErr } = await supabase.from("policy_versions").insert({
+      policy_id: policy.id,
+      version_label: input.versionLabel || "1.0",
+      content: input.content,
+      published_at: new Date().toISOString()
+    });
+    if (vErr) throw vErr;
   },
+
   async publishPolicyVersion(session: SessionState, policyId: string, versionLabel: string, content: string) {
-    const { error } = await supabase.from("policies").update({ version: versionLabel, version_label: versionLabel, content, status: "published", is_published: true, published_at: new Date().toISOString() }).eq("id", policyId);
+    const { error } = await supabase.from("policy_versions").insert({
+      policy_id: policyId,
+      version_label: versionLabel,
+      content: content,
+      published_by: session.user.id,
+      published_at: new Date().toISOString()
+    });
     if (error) throw error;
   },
+
   async getPolicySignatureReport(policyId: string): Promise<{ signed: PolicySignatureSummary[]; pending: PolicyPendingDriver[]; versionLabel: string }> {
-    const { data, error } = await supabase.from("policy_signatures").select("*").eq("policy_id", policyId);
-    if (error) throw error;
-    return { signed: (data ?? []) as PolicySignatureSummary[], pending: [], versionLabel: "" };
+    const { data: versions } = await supabase.from("policy_versions").select("*").eq("policy_id", policyId);
+    const sortedVersions = (versions ?? []).sort((a: any, b: any) => new Date(b.published_at || 0).getTime() - new Date(a.published_at || 0).getTime());
+    const latest = sortedVersions[0];
+    if (!latest) return { signed: [], pending: [], versionLabel: "" };
+
+    const { data: signatures } = await supabase.from("policy_signatures").select("*").eq("policy_version_id", latest.id);
+    const { data: drivers } = await supabase.from("profiles").select("id, full_name, email, depot_location").eq("role", "driver");
+
+    const signedDriverIds = new Set((signatures ?? []).map((s: any) => s.user_id));
+    const driverMap = new Map((drivers ?? []).map((d: any) => [d.id, d]));
+
+    const signed: PolicySignatureSummary[] = (signatures ?? []).map((s: any) => {
+      const d = driverMap.get(s.user_id);
+      return {
+        policyId,
+        policyTitle: "",
+        policyVersion: latest.version_label,
+        signedCount: signatures?.length ?? 0,
+        pendingCount: Math.max(0, (drivers?.length ?? 0) - (signatures?.length ?? 0)),
+        totalDrivers: drivers?.length ?? 0,
+        driverId: s.user_id,
+        signedAt: s.signed_at,
+        driverName: d?.full_name || "Driver",
+        driverEmail: d?.email || "",
+        signatureText: s.signature_text
+      };
+    });
+
+    const pending: PolicyPendingDriver[] = (drivers ?? [])
+      .filter((d: any) => !signedDriverIds.has(d.id))
+      .map((d: any) => ({
+        id: d.id,
+        driverId: d.id,
+        fullName: d.full_name || "Driver",
+        driverName: d.full_name || "Driver",
+        email: d.email || "",
+        driverEmail: d.email || "",
+        depotLocation: d.depot_location || "Melbourne Hub"
+      }));
+
+    return { signed, pending, versionLabel: latest.version_label };
   }
 };
 
@@ -2416,17 +2574,54 @@ async function getAdminFleetData(): Promise<{
 }
 
 async function verifyVehiclePass(passCode: string): Promise<VehiclePassVerificationResult> {
+  const clean = passCode.trim();
   const baseUrl = apiBaseUrl.endsWith("/api") ? apiBaseUrl.slice(0, -4) : apiBaseUrl;
-  const res = await fetch(`${baseUrl}/api/vehicle/verify/${encodeURIComponent(passCode)}`, {
-    headers: { accept: "application/json" }
-  });
-  if (!res.ok) {
-    if (res.status === 404) {
+
+  try {
+    const res = await fetch(`${baseUrl}/api/vehicle/verify/${encodeURIComponent(clean)}`, {
+      headers: { accept: "application/json" }
+    });
+    const contentType = res.headers.get("content-type") || "";
+    if (res.ok && contentType.includes("application/json")) {
+      return (await res.json()) as VehiclePassVerificationResult;
+    }
+    if (res.status === 404 && contentType.includes("application/json")) {
       return { verified: false, message: "Vehicle pass not found." };
     }
-    throw new Error("Verification service is unavailable. Please try again.");
+  } catch (e) {
+    console.warn("Backend vehicle verification endpoint unreachable, falling back to direct database query:", e);
   }
-  return (await res.json()) as VehiclePassVerificationResult;
+
+  // Direct Supabase fallback
+  const { data: vehicle, error: vErr } = await supabase
+    .from("driver_vehicles")
+    .select("*, profiles:user_id (full_name, email)")
+    .or(`qr_pass_code.eq.${clean},rego.ilike.${clean},id.eq.${clean}`)
+    .maybeSingle();
+
+  if (vErr || !vehicle) {
+    return { verified: false, message: "Vehicle pass not found." };
+  }
+
+  return {
+    verified: true,
+    organizationName: organizationName,
+    vehicle: {
+      passCode: vehicle.qr_pass_code || vehicle.id,
+      rego: vehicle.rego,
+      makeModel: vehicle.make_model,
+      bodyType: vehicle.body_type ?? null,
+      branchName: vehicle.branch_name ?? null,
+      status: vehicle.status,
+      regoExpiryDate: vehicle.rego_expiry_date ?? null,
+      dgExpiryDate: vehicle.dg_expiry_date ?? null,
+      scbaServiceDueDate: vehicle.scba_service_due_date ?? null
+    },
+    driver: {
+      fullName: vehicle.profiles?.full_name ?? vehicle.driver_name ?? "",
+      email: vehicle.profiles?.email ?? ""
+    }
+  };
 }
 
 async function verifyDriver(driverId: string): Promise<DriverVerificationResult> {

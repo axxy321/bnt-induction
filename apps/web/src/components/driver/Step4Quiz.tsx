@@ -107,8 +107,18 @@ export function Step4Quiz({ questions, onSubmitQuiz, onContinue, loading }: Step
         </p>
       </div>
 
+      {/* Empty / Loading State */}
+      {questions.length === 0 && (
+        <div style={{ textAlign: "center", padding: "36px 20px" }}>
+          <div style={{ width: "32px", height: "32px", border: "3px solid rgba(37,99,235,0.2)", borderTopColor: "#2563eb", borderRadius: "50%", margin: "0 auto 14px", animation: "spin 1s linear infinite" }} />
+          <p style={{ color: "#64748b", fontWeight: 600, fontSize: "0.92rem", margin: 0 }}>
+            Loading knowledge check questions...
+          </p>
+        </div>
+      )}
+
       {/* Answered progress */}
-      {!result?.passed && !isLocked && (
+      {questions.length > 0 && !result?.passed && !isLocked && (
         <div style={{ marginBottom: "18px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: "#64748b", fontWeight: 700, marginBottom: "6px" }}>
             <span>{t("s4_answered", { n: answeredCount, total: questions.length })}</span>
