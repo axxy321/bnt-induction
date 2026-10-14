@@ -57,6 +57,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       return handleSelfRegisterDriver(request, env);
     }
 
+    // --- Password Reset Request (Driver Forgot Password) ---
+    if (cleanPath === "auth/password-reset-request" && method === "POST") {
+      return handlePasswordResetRequest(request, env);
+    }
+
     // --- Admin Routes ---
     if (cleanPath.startsWith("admin/")) {
       const adminId = await requireAdmin(request, env);
@@ -106,6 +111,16 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       // Delete Driver
       if (driverMatch && method === "DELETE") {
         return handleDeleteDriver(request, env, adminId, driverMatch[1]);
+      }
+
+      // Password Help Requests
+      if (cleanPath === "admin/password-reset-requests" && method === "GET") {
+        return handleGetPasswordResetRequests(env, adminId);
+      }
+
+      const pwReqHandledMatch = cleanPath.match(/^admin\/password-reset-requests\/([^/]+)\/handled$/);
+      if (pwReqHandledMatch && method === "POST") {
+        return handleMarkPasswordResetRequestHandled(env, adminId, pwReqHandledMatch[1]);
       }
 
       // Export Reports
@@ -524,6 +539,107 @@ async function handleResetPassword(request: Request, env: Env, adminId: string, 
   await supabase.auth.admin.updateUserById(driverId, { password });
   await logAuditEntry(supabase, adminId, "admin_password_reset", { driverId });
   return jsonResponse({ message: "Password reset" });
+}
+
+async function handlePasswordResetRequest(request: Request, env: Env): Promise<Response> {
+  const supabase = getSupabaseAdmin(env);
+  const body = (await request.json().catch(() => ({}))) as { email?: string };
+  const rawEmail = body.email;
+
+  if (!rawEmail || typeof rawEmail !== "string") {
+    return errorResponse("A valid email address is required.", 400);
+  }
+
+  const normalizedEmail = rawEmail.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return errorResponse("A valid email address is required.", 400);
+  }
+
+  try {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, email, full_name")
+      .ilike("email", normalizedEmail)
+      .eq("role", "driver")
+      .maybeSingle();
+
+    if (profile) {
+      const { data: existingRequest } = await supabase
+        .from("driver_password_reset_requests")
+        .select("id")
+        .eq("driver_id", profile.id)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (!existingRequest) {
+        await supabase
+          .from("driver_password_reset_requests")
+          .insert({
+            driver_id: profile.id,
+            email: normalizedEmail,
+            status: "pending",
+            created_at: new Date().toISOString()
+          });
+      }
+
+      await logAuditEntry(supabase, profile.id, "driver_password_help_requested", { email: normalizedEmail });
+    }
+  } catch (err: any) {
+    console.error("[PASSWORD_HELP] Unexpected error:", err?.message);
+  }
+
+  return jsonResponse({
+    message: "If this email belongs to a driver account, an administrator will review the password help request."
+  }, 202);
+}
+
+async function handleGetPasswordResetRequests(env: Env, _adminId: string): Promise<Response> {
+  const supabase = getSupabaseAdmin(env);
+  try {
+    const { data, error } = await supabase
+      .from("driver_password_reset_requests")
+      .select("*, driver:profiles!driver_password_reset_requests_driver_id_fkey(full_name, phone)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      const { data: raw, error: rawError } = await supabase
+        .from("driver_password_reset_requests")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (rawError) throw rawError;
+      return jsonResponse(raw ?? []);
+    }
+
+    return jsonResponse(data ?? []);
+  } catch (err: any) {
+    return errorResponse(`Failed to load password help requests: ${err?.message}`, 500);
+  }
+}
+
+async function handleMarkPasswordResetRequestHandled(env: Env, adminId: string, requestId: string): Promise<Response> {
+  const supabase = getSupabaseAdmin(env);
+  const handledAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("driver_password_reset_requests")
+    .update({
+      status: "handled",
+      handled_at: handledAt,
+      handled_by: adminId
+    })
+    .eq("id", requestId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return errorResponse(`Failed to mark request handled: ${error.message}`, 500);
+  }
+  if (!data) {
+    return errorResponse("Pending password help request not found.", 404);
+  }
+
+  await logAuditEntry(supabase, adminId, "driver_password_help_request_handled", { requestId });
+  return jsonResponse({ message: "Password help request marked as handled." });
 }
 
 async function handleResetInduction(request: Request, env: Env, adminId: string, driverId: string) {

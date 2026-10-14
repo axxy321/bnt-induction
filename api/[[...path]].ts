@@ -444,6 +444,66 @@ async function handleChangePassword(request: Request): Promise<Response> {
   return jsonResponse({ message: "Password updated successfully." });
 }
 
+async function handlePasswordResetRequest(request: Request): Promise<Response> {
+  const supabase = getSupabaseAdmin();
+  const body = (await request.json().catch(() => ({}))) as { email?: string };
+  const rawEmail = body.email;
+
+  if (!rawEmail || typeof rawEmail !== "string") {
+    return errorResponse("A valid email address is required.", 400);
+  }
+
+  const normalizedEmail = rawEmail.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return errorResponse("A valid email address is required.", 400);
+  }
+
+  try {
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, email, full_name")
+      .ilike("email", normalizedEmail)
+      .eq("role", "driver")
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("[PASSWORD_HELP] Profile lookup error:", profileError.message);
+    }
+
+    if (profile) {
+      const { data: existingRequest } = await supabase
+        .from("driver_password_reset_requests")
+        .select("id")
+        .eq("driver_id", profile.id)
+        .eq("status", "pending")
+        .maybeSingle();
+
+      if (!existingRequest) {
+        const { error: insertError } = await supabase
+          .from("driver_password_reset_requests")
+          .insert({
+            driver_id: profile.id,
+            email: normalizedEmail,
+            status: "pending",
+            created_at: new Date().toISOString()
+          });
+
+        if (insertError) {
+          console.error("[PASSWORD_HELP] Insert error:", insertError.message);
+        }
+      }
+
+      await logAuditEntry(profile.id, "driver_password_help_requested", { email: normalizedEmail });
+    }
+  } catch (err: any) {
+    console.error("[PASSWORD_HELP] Unexpected error:", err?.message);
+  }
+
+  return jsonResponse({
+    message: "If this email belongs to a driver account, an administrator will review the password help request."
+  }, 202);
+}
+
 async function handleGetQuizQuestions(userId: string): Promise<Response> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("quiz_questions").select("*");
@@ -1378,6 +1438,56 @@ async function handleResetPassword(request: Request, adminId: string, driverId: 
   return jsonResponse({ message: "Password reset" });
 }
 
+async function handleGetPasswordResetRequests(_adminId: string): Promise<Response> {
+  const supabase = getSupabaseAdmin();
+  try {
+    const { data, error } = await supabase
+      .from("driver_password_reset_requests")
+      .select("*, driver:profiles!driver_password_reset_requests_driver_id_fkey(full_name, phone)")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.warn("Joined password reset requests failed, falling back to raw select:", error.message);
+      const { data: raw, error: rawError } = await supabase
+        .from("driver_password_reset_requests")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (rawError) throw rawError;
+      return jsonResponse(raw ?? []);
+    }
+
+    return jsonResponse(data ?? []);
+  } catch (err: any) {
+    return errorResponse(`Failed to load password help requests: ${err?.message}`, 500);
+  }
+}
+
+async function handleMarkPasswordResetRequestHandled(adminId: string, requestId: string): Promise<Response> {
+  const supabase = getSupabaseAdmin();
+  const handledAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("driver_password_reset_requests")
+    .update({
+      status: "handled",
+      handled_at: handledAt,
+      handled_by: adminId
+    })
+    .eq("id", requestId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return errorResponse(`Failed to mark request handled: ${error.message}`, 500);
+  }
+  if (!data) {
+    return errorResponse("Pending password help request not found.", 404);
+  }
+
+  await logAuditEntry(adminId, "driver_password_help_request_handled", { requestId });
+  return jsonResponse({ message: "Password help request marked as handled." });
+}
+
 async function handleResetInduction(_request: Request, adminId: string, driverId: string): Promise<Response> {
   const supabase = getSupabaseAdmin();
   const now = new Date().toISOString();
@@ -1837,6 +1947,14 @@ export default async function handler(request: Request): Promise<Response> {
       return await handleSelfRegisterDriver(request);
     }
 
+    // --- Password Reset Request (Driver Forgot Password) ---
+    if (cleanPath === "auth/password-reset-request" && method === "POST") {
+      if (!rateLimitCheck(`pwhelp:${clientIp(request)}`, 10, 60_000)) {
+        return errorResponse("Too many requests. Please slow down and try again shortly.", 429);
+      }
+      return await handlePasswordResetRequest(request);
+    }
+
     // --- Change Password (any authenticated user) ---
     if (cleanPath === "auth/change-password" && method === "POST") {
       if (!rateLimitCheck(`changepw:${clientIp(request)}`, 10, 60_000)) {
@@ -1891,6 +2009,16 @@ export default async function handler(request: Request): Promise<Response> {
 
       if (driverMatch && method === "DELETE") {
         return await handleDeleteDriver(request, adminId, driverMatch[1]);
+      }
+
+      // Password Help Requests
+      if (cleanPath === "admin/password-reset-requests" && method === "GET") {
+        return await handleGetPasswordResetRequests(adminId);
+      }
+
+      const pwReqHandledMatch = cleanPath.match(/^admin\/password-reset-requests\/([^/]+)\/handled$/);
+      if (pwReqHandledMatch && method === "POST") {
+        return await handleMarkPasswordResetRequestHandled(adminId, pwReqHandledMatch[1]);
       }
 
       // Export Reports
