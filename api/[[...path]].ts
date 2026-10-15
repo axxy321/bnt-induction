@@ -9,6 +9,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJh
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndicmN1bHZ0YWNma2p6cWhob3VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NTA4NDgsImV4cCI6MjEwMDIyNjg0OH0.vxmD4mpvPaG0IhlS7i8FisLXRy6CZdq48ur_4Fr8KN4";
 const APP_URL = process.env.APP_URL || "https://driver-induction-platform.vercel.app";
 const ORGANIZATION_NAME = process.env.ORGANIZATION_NAME ?? "BNT Logistics";
+const ORGANIZATION_LOGO_URL = process.env.ORGANIZATION_LOGO_URL ?? "";
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
 const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "BNT Logistics <compliance@humefreight.com.au>";
 const ADMIN_NOTIFICATION_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL || "admin@bntlogistics.com.au";
@@ -730,7 +731,7 @@ async function handlePasswordResetRequest(request: Request): Promise<Response> {
         secondaryNote: "This request has also been queued in the Admin Password Help Requests system."
       });
 
-      void sendEmailViaResend(
+      await sendEmailViaResend(
         adminNotificationEmail,
         `[Action Required] Driver Password Assistance Request: ${driverName}`,
         adminAlertHtml
@@ -1355,7 +1356,7 @@ async function handleIssueCertificate(userId: string, request?: Request): Promis
       secondaryNote: "Your annual induction refresher will become due in 12 months. An automated reminder will be issued prior to expiry."
     });
 
-    void sendEmailViaResend(
+    await sendEmailViaResend(
       driverProfile.email,
       `Induction Complete — Official Certificate Issued by ${ORGANIZATION_NAME}`,
       certificateHtml
@@ -1688,7 +1689,7 @@ async function handleCreateDriver(request: Request, adminId: string): Promise<Re
     secondaryNote: "If you need assistance logging in or uploading your documents, please contact compliance@humefreight.com.au or your depot safety manager."
   });
 
-  void sendEmailViaResend(
+  await sendEmailViaResend(
     payload.email,
     `Welcome to BNT Logistics — Your Driver Induction Credentials`,
     welcomeHtml
@@ -1782,7 +1783,7 @@ async function handleResetPassword(request: Request, adminId: string, driverId: 
       secondaryNote: "Always keep your portal login credentials safe and never share your password."
     });
 
-    void sendEmailViaResend(
+    await sendEmailViaResend(
       driverProfile.email,
       `Your BNT Logistics Driver Portal Password Has Been Reset`,
       resetHtml
@@ -2302,7 +2303,7 @@ async function handleVerifyDocument(
         }
       });
 
-      void sendEmailViaResend(
+      await sendEmailViaResend(
         driverProfile.email,
         `Document Approved: ${docTitle} — BNT Logistics Compliance`,
         approveHtml
@@ -2336,7 +2337,7 @@ async function handleVerifyDocument(
         secondaryNote: "If you need clarification regarding this requirement, please contact your depot supervisor or safety manager."
       });
 
-      void sendEmailViaResend(
+      await sendEmailViaResend(
         driverProfile.email,
         `Action Required: ${docTitle} Not Approved — BNT Logistics Compliance`,
         rejectHtml
