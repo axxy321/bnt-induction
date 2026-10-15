@@ -9,9 +9,9 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJh
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndicmN1bHZ0YWNma2p6cWhob3VlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2NTA4NDgsImV4cCI6MjEwMDIyNjg0OH0.vxmD4mpvPaG0IhlS7i8FisLXRy6CZdq48ur_4Fr8KN4";
 const APP_URL = process.env.APP_URL || "https://driver-induction-platform.vercel.app";
 const ORGANIZATION_NAME = process.env.ORGANIZATION_NAME ?? "BNT Logistics";
-const ORGANIZATION_LOGO_URL = process.env.ORGANIZATION_LOGO_URL ?? "";
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
-const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "";
+const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "BNT Logistics <compliance@humefreight.com.au>";
+const ADMIN_NOTIFICATION_EMAIL = process.env.ADMIN_NOTIFICATION_EMAIL || "admin@bntlogistics.com.au";
 const ALLOW_SELF_REGISTRATION = process.env.ALLOW_SELF_REGISTRATION === "true";
 
 const DEFAULT_BRANDING = {
@@ -170,31 +170,235 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-async function sendEmailViaResend(to: string, subject: string, html: string) {
-  if (!RESEND_API_KEY) {
+async function sendEmailViaResend(to: string, subject: string, html: string): Promise<boolean> {
+  const apiKey = RESEND_API_KEY;
+  const fromEmail = RESEND_FROM_EMAIL || "BNT Logistics <compliance@humefreight.com.au>";
+  if (!apiKey) {
     console.warn(`[EMAIL] RESEND_API_KEY not set. Email NOT sent to ${to}.`);
-    return;
+    return false;
   }
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: RESEND_FROM_EMAIL || "onboarding@resend.dev",
+        from: fromEmail,
         to,
         subject,
         html
       })
     });
     if (!res.ok) {
-      console.error("[EMAIL] Resend dispatch failed:", res.status, await res.text().catch(() => ""));
+      const errText = await res.text().catch(() => "");
+      console.error("[EMAIL] Resend dispatch failed:", res.status, errText);
+      return false;
     }
+    const resData = (await res.json().catch(() => ({}))) as { id?: string };
+    console.log(`[EMAIL] Resend dispatch success to ${to} (id: ${resData?.id ?? "unknown"})`);
+    return true;
   } catch (err: any) {
     console.error("[EMAIL] Resend dispatch error:", err?.message);
+    return false;
   }
+}
+
+function escapeHtml(str: string): string {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getDocTitle(type?: string): string {
+  if (!type) return "Compliance Document";
+  const docLabels: Record<string, string> = {
+    driver_license: "Heavy Vehicle Driver Licence",
+    medical_certificate: "Commercial Driver Medical Assessment",
+    right_to_work: "Right to Work / Visa Verification",
+    identity_proof: "Proof of Identity",
+    dangerous_goods_license: "Dangerous Goods Driver Licence",
+    induction_certificate: "Annual Induction Refresher Certificate"
+  };
+  return docLabels[type] || type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+}
+
+interface EmailBadge {
+  text: string;
+  bg?: string;
+  color?: string;
+  border?: string;
+}
+
+interface EmailDetail {
+  label: string;
+  value: string;
+}
+
+interface EmailCallout {
+  text: string;
+  type?: "info" | "warning" | "alert" | "success";
+}
+
+interface EmailButton {
+  label: string;
+  url: string;
+  color?: string;
+}
+
+function buildBrandedEmailHtml(options: {
+  headline: string;
+  badge?: EmailBadge;
+  greeting: string;
+  leadParagraph: string;
+  details?: EmailDetail[];
+  callout?: EmailCallout;
+  ctaButton?: EmailButton;
+  secondaryNote?: string;
+}): string {
+  const calloutStyles: Record<string, { bg: string; border: string; text: string }> = {
+    info: { bg: "#f0f9ff", border: "#0284c7", text: "#0369a1" },
+    warning: { bg: "#fffbeb", border: "#d97706", text: "#92400e" },
+    alert: { bg: "#fef2f2", border: "#dc2626", text: "#991b1b" },
+    success: { bg: "#f0fdf4", border: "#16a34a", text: "#166534" }
+  };
+  const cStyle = calloutStyles[options.callout?.type || "info"];
+  const btnColor = options.ctaButton?.color || "#10b981";
+
+  const detailsRows = (options.details ?? [])
+    .map(
+      (d, i) => `
+      <tr style="${i > 0 ? "border-top:1px solid #e2e8f0;" : ""}">
+        <td style="padding:12px 16px;font-weight:600;color:#64748b;width:38%;background:#f8fafc;font-size:13px;vertical-align:top;">${escapeHtml(d.label)}</td>
+        <td style="padding:12px 16px;font-weight:600;color:#0f172a;font-size:13px;word-break:break-word;">${escapeHtml(d.value)}</td>
+      </tr>`
+    )
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(options.headline)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0b1324;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#0b1324;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.35);border:1px solid #1e293b;" cellspacing="0" cellpadding="0">
+          <!-- Header Banner -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);padding:28px 32px;border-bottom:3px solid #10b981;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size:22px;font-weight:800;letter-spacing:0.5px;color:#ffffff;text-transform:uppercase;">
+                      BNT <span style="color:#10b981;">LOGISTICS</span>
+                    </div>
+                    <div style="font-size:11px;font-weight:600;letter-spacing:1.5px;color:#94a3b8;text-transform:uppercase;margin-top:4px;">
+                      Compliance &amp; Safety Induction System
+                    </div>
+                  </td>
+                  <td align="right" style="vertical-align:middle;">
+                    <span style="display:inline-block;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#34d399;font-size:10px;font-weight:700;padding:4px 10px;border-radius:9999px;text-transform:uppercase;letter-spacing:0.5px;">
+                      NHVAS ACCREDITED
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding:32px 32px 24px;background-color:#ffffff;">
+              ${
+                options.badge
+                  ? `<div style="margin-bottom:16px;">
+                      <span style="display:inline-block;background-color:${options.badge.bg || "#ecfdf5"};color:${options.badge.color || "#065f46"};border:1px solid ${options.badge.border || "#a7f3d0"};font-size:11px;font-weight:700;padding:4px 12px;border-radius:9999px;text-transform:uppercase;letter-spacing:0.5px;">
+                        ${escapeHtml(options.badge.text)}
+                      </span>
+                    </div>`
+                  : ""
+              }
+
+              <h1 style="margin:0 0 16px;font-size:22px;font-weight:800;color:#0f172a;line-height:1.3;">
+                ${escapeHtml(options.headline)}
+              </h1>
+
+              <p style="margin:0 0 8px;font-size:15px;font-weight:700;color:#334155;">
+                ${escapeHtml(options.greeting)}
+              </p>
+
+              <div style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;">
+                ${options.leadParagraph}
+              </div>
+
+              ${
+                options.details && options.details.length > 0
+                  ? `<div style="margin:20px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                        ${detailsRows}
+                      </table>
+                    </div>`
+                  : ""
+              }
+
+              ${
+                options.callout
+                  ? `<div style="margin:20px 0;padding:14px 18px;border-radius:8px;background-color:${cStyle.bg};border-left:4px solid ${cStyle.border};font-size:13px;line-height:1.5;color:${cStyle.text};">
+                      ${options.callout.text}
+                    </div>`
+                  : ""
+              }
+
+              ${
+                options.ctaButton
+                  ? `<div style="margin:28px 0 16px;text-align:center;">
+                      <a href="${options.ctaButton.url}" target="_blank" style="display:inline-block;background:${btnColor};color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 28px;border-radius:8px;letter-spacing:0.3px;box-shadow:0 4px 12px rgba(16,185,129,0.25);">
+                        ${escapeHtml(options.ctaButton.label)} &rarr;
+                      </a>
+                    </div>`
+                  : ""
+              }
+
+              ${
+                options.secondaryNote
+                  ? `<p style="margin:16px 0 0;font-size:11px;color:#94a3b8;text-align:center;line-height:1.5;">
+                      ${escapeHtml(options.secondaryNote)}
+                    </p>`
+                  : ""
+              }
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#0f172a;padding:22px 32px;text-align:center;border-top:1px solid #1e293b;">
+              <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#e2e8f0;">
+                BNT Logistics Pty Ltd
+              </p>
+              <p style="margin:0 0 10px;font-size:11px;color:#94a3b8;line-height:1.4;">
+                National Heavy Vehicle Accreditation Scheme (NHVAS) Accredited Operator<br>
+                Fatigue Management • Mass Management • Vehicle Maintenance
+              </p>
+              <p style="margin:0;font-size:10px;color:#64748b;line-height:1.4;">
+                This is an automated operational compliance notification. Please do not reply directly to this email.<br>
+                For compliance assistance, contact safety dispatch at compliance@humefreight.com.au.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 function renderVerificationPage(payload: {
@@ -461,7 +665,7 @@ async function handlePasswordResetRequest(request: Request): Promise<Response> {
   try {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, email, full_name")
+      .select("id, email, full_name, phone, depot_location")
       .ilike("email", normalizedEmail)
       .eq("role", "driver")
       .maybeSingle();
@@ -494,6 +698,43 @@ async function handlePasswordResetRequest(request: Request): Promise<Response> {
       }
 
       await logAuditEntry(profile.id, "driver_password_help_requested", { email: normalizedEmail });
+
+      // Workflow 3: Forgot password -> Email sent to admin
+      const adminNotificationEmail = ADMIN_NOTIFICATION_EMAIL || "admin@bntlogistics.com.au";
+      const driverName = profile.full_name || "Registered Driver";
+      const driverPhone = (profile as any).phone || "Not recorded";
+      const depotLocation = (profile as any).depot_location || "General Fleet";
+      const nowStr = new Date().toLocaleString("en-AU", { timeZone: "Australia/Melbourne" });
+
+      const adminAlertHtml = buildBrandedEmailHtml({
+        headline: "Driver Password Assistance Request",
+        badge: { text: "Admin Action Required", bg: "#fffbeb", color: "#92400e", border: "#fde68a" },
+        greeting: "Compliance Administrator,",
+        leadParagraph: `A driver has submitted a password assistance request through the <strong>${ORGANIZATION_NAME}</strong> Driver Induction Portal and cannot access their account.`,
+        details: [
+          { label: "Driver Name", value: driverName },
+          { label: "Driver Email", value: normalizedEmail },
+          { label: "Phone", value: driverPhone },
+          { label: "Depot Location", value: depotLocation },
+          { label: "Request Timestamp", value: `${nowStr} (AEST)` }
+        ],
+        callout: {
+          text: "<strong>Action Required:</strong> Log in to the Admin Dashboard under the <strong>Password Help</strong> tab to reset this driver's password and dispatch updated credentials.",
+          type: "warning"
+        },
+        ctaButton: {
+          label: "Open Admin Dashboard",
+          url: `${APP_URL}/admin`,
+          color: "#2563eb"
+        },
+        secondaryNote: "This request has also been queued in the Admin Password Help Requests system."
+      });
+
+      void sendEmailViaResend(
+        adminNotificationEmail,
+        `[Action Required] Driver Password Assistance Request: ${driverName}`,
+        adminAlertHtml
+      );
     }
   } catch (err: any) {
     console.error("[PASSWORD_HELP] Unexpected error:", err?.message);
@@ -1082,17 +1323,43 @@ async function handleIssueCertificate(userId: string, request?: Request): Promis
   await supabase.from("drivers").update({ status: "Completed" }).eq("user_id", userId);
   await logAuditEntry(userId, "certificate_generated", { completionId, verificationCode, issuedAt });
 
-  // Dispatch completion email to driver (non-blocking)
+  // Workflow 5: Generate certificate -> Email sent to driver
   const { data: driverProfile } = await supabase.from("profiles").select("email, full_name").eq("id", userId).single();
   if (driverProfile?.email) {
-    const expiry = expiresAt.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
-    const html = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:auto;padding:32px">
-      <h2 style="color:#1e3a5f">Congratulations, ${driverProfile.full_name ?? "Driver"}!</h2>
-      <p>You have successfully completed the <strong>${ORGANIZATION_NAME}</strong> Driver Induction Program.</p>
-      <p>Your certificate is valid for <strong>12 months</strong> and expires on <strong>${expiry}</strong>.</p>
-      <p><a href="${verificationUrl}" style="display:inline-block;background:#1e3a5f;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none">View Certificate</a></p>
-    </div>`;
-    void sendEmailViaResend(driverProfile.email, `Induction Complete — Certificate Issued by ${ORGANIZATION_NAME}`, html);
+    const issuedDateFormatted = new Date(issuedAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+    const expiryFormatted = expiresAt.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
+    const driverDisplayName = driverProfile.full_name ?? "Driver";
+
+    const certificateHtml = buildBrandedEmailHtml({
+      headline: "Induction Completed — Official Certificate Issued",
+      badge: { text: "Induction Complete • 100%", bg: "#ecfdf5", color: "#065f46", border: "#a7f3d0" },
+      greeting: `Congratulations, ${driverDisplayName}!`,
+      leadParagraph: `You have successfully completed 100% of the <strong>${ORGANIZATION_NAME}</strong> Driver Induction Program, passing all National Heavy Vehicle Regulator (NHVR) safety modules, Basic Fatigue Management (BFM), and load restraint compliance assessments.`,
+      details: [
+        { label: "Driver Name", value: driverDisplayName },
+        { label: "Completion ID", value: completionId },
+        { label: "Verification Code", value: verificationCode },
+        { label: "Issued Date", value: issuedDateFormatted },
+        { label: "Expiry Date", value: `${expiryFormatted} (Valid 12 Months)` },
+        { label: "Accreditation", value: "NHVAS Basic Fatigue, Mass & Maintenance Management" }
+      ],
+      callout: {
+        text: "<strong>Compliance Note:</strong> Your certificate is legally verifiable on the BNT Logistics accreditation registry. You can present your verification code or QR code at any BNT depot gate or loading facility.",
+        type: "success"
+      },
+      ctaButton: {
+        label: "View & Download Official Certificate",
+        url: verificationUrl,
+        color: "#10b981"
+      },
+      secondaryNote: "Your annual induction refresher will become due in 12 months. An automated reminder will be issued prior to expiry."
+    });
+
+    void sendEmailViaResend(
+      driverProfile.email,
+      `Induction Complete — Official Certificate Issued by ${ORGANIZATION_NAME}`,
+      certificateHtml
+    );
   }
 
   return jsonResponse({
@@ -1396,7 +1663,38 @@ async function handleCreateDriver(request: Request, adminId: string): Promise<Re
 
   await logAuditEntry(adminId, "admin_driver_created", { driverId: userId, email: payload.email });
 
-  return jsonResponse({ message: "Driver account created.", userId }, 201);
+  // Workflow 1: Driver management -> Email sent to driver
+  const welcomeHtml = buildBrandedEmailHtml({
+    headline: "Welcome to BNT Logistics — Driver Portal Credentials",
+    badge: { text: "Profile Activated", bg: "#ecfdf5", color: "#065f46", border: "#a7f3d0" },
+    greeting: `Welcome to the Fleet, ${payload.fullName}!`,
+    leadParagraph: `Your driver profile has been created for the <strong>${ORGANIZATION_NAME}</strong> Driver Induction &amp; Safety Compliance Portal. Please use the credentials below to log in, complete your mandatory safety modules, and upload your compliance documents.`,
+    details: [
+      { label: "Driver Name", value: payload.fullName },
+      { label: "Login Email", value: payload.email },
+      { label: "Temporary Password", value: payload.password },
+      { label: "Portal Access", value: APP_URL },
+      { label: "Preferred Language", value: payload.preferredLanguage || "English" }
+    ],
+    callout: {
+      text: "<strong>Important:</strong> For security compliance, you will be prompted to set a new password upon your first sign in. Please keep these credentials confidential.",
+      type: "info"
+    },
+    ctaButton: {
+      label: "Log In to Driver Induction Portal",
+      url: `${APP_URL}/login`,
+      color: "#10b981"
+    },
+    secondaryNote: "If you need assistance logging in or uploading your documents, please contact compliance@humefreight.com.au or your depot safety manager."
+  });
+
+  void sendEmailViaResend(
+    payload.email,
+    `Welcome to BNT Logistics — Your Driver Induction Credentials`,
+    welcomeHtml
+  );
+
+  return jsonResponse({ message: "Driver account created.", userId, emailSent: true }, 201);
 }
 
 async function handleUpdateDriver(request: Request, adminId: string, driverId: string): Promise<Response> {
@@ -1432,10 +1730,66 @@ async function handleUpdateDriver(request: Request, adminId: string, driverId: s
 
 async function handleResetPassword(request: Request, adminId: string, driverId: string): Promise<Response> {
   const supabase = getSupabaseAdmin();
-  const { password } = await request.json() as { password: string };
-  await supabase.auth.admin.updateUserById(driverId, { password });
+  const { password } = (await request.json()) as { password: string };
+  if (!password || password.length < 8) {
+    return errorResponse("Password must be at least 8 characters.", 400);
+  }
+
+  const { error: updateError } = await supabase.auth.admin.updateUserById(driverId, { password });
+  if (updateError) throw updateError;
+
   await logAuditEntry(adminId, "admin_password_reset", { driverId });
-  return jsonResponse({ message: "Password reset" });
+
+  // Mark any pending password reset requests for this driver as handled
+  await supabase
+    .from("driver_password_reset_requests")
+    .update({ status: "handled", handled_at: new Date().toISOString() })
+    .eq("driver_id", driverId)
+    .eq("status", "pending");
+
+  // Workflow 4: Password reset -> Email sent to driver
+  const { data: driverProfile } = await supabase
+    .from("profiles")
+    .select("email, full_name")
+    .eq("id", driverId)
+    .single();
+
+  if (driverProfile?.email) {
+    const driverDisplayName = driverProfile.full_name || "Driver";
+    const nowStr = new Date().toLocaleString("en-AU", { timeZone: "Australia/Melbourne" });
+
+    const resetHtml = buildBrandedEmailHtml({
+      headline: "Your Password Has Been Reset",
+      badge: { text: "Security Update", bg: "#eff6ff", color: "#1e40af", border: "#bfdbfe" },
+      greeting: `Hello ${driverDisplayName},`,
+      leadParagraph: `An administrator has updated your password for the <strong>${ORGANIZATION_NAME}</strong> Driver Induction &amp; Safety Compliance Portal.`,
+      details: [
+        { label: "Driver Name", value: driverDisplayName },
+        { label: "Login Email", value: driverProfile.email },
+        { label: "New Password", value: password },
+        { label: "Portal Access", value: APP_URL },
+        { label: "Updated At", value: `${nowStr} (AEST)` }
+      ],
+      callout: {
+        text: "<strong>Security Notice:</strong> Please sign in with your new credentials. If you did not request or expect this change, please contact BNT Logistics compliance dispatch immediately.",
+        type: "alert"
+      },
+      ctaButton: {
+        label: "Log In to Driver Portal",
+        url: `${APP_URL}/login`,
+        color: "#10b981"
+      },
+      secondaryNote: "Always keep your portal login credentials safe and never share your password."
+    });
+
+    void sendEmailViaResend(
+      driverProfile.email,
+      `Your BNT Logistics Driver Portal Password Has Been Reset`,
+      resetHtml
+    );
+  }
+
+  return jsonResponse({ message: "Password reset successfully.", emailSent: true });
 }
 
 async function handleGetPasswordResetRequests(_adminId: string): Promise<Response> {
@@ -1837,14 +2191,19 @@ async function handleGetVerificationQueue(adminId: string): Promise<Response> {
   return jsonResponse({ documents: enrichedDocs });
 }
 
-async function handleVerifyDocument(request: Request, adminId: string, docId: string): Promise<Response> {
+async function handleVerifyDocument(
+  request: Request,
+  adminId: string,
+  docId: string,
+  forceAction?: "approve" | "reject"
+): Promise<Response> {
   const supabase = getSupabaseAdmin();
   const body = (await request.json().catch(() => ({}))) as {
     action?: "approve" | "reject";
     expiresAt?: string;
     reason?: string;
   };
-  const action = body.action;
+  const action = forceAction || body.action;
 
   if (action !== "approve" && action !== "reject") {
     return errorResponse("Action must be 'approve' or 'reject'.", 400);
@@ -1879,6 +2238,15 @@ async function handleVerifyDocument(request: Request, adminId: string, docId: st
     .eq("id", docId);
   if (updateError) throw updateError;
 
+  // Lookup driver profile for notification dispatch
+  const { data: driverProfile } = await supabase
+    .from("profiles")
+    .select("email, full_name")
+    .eq("id", driverId)
+    .single();
+
+  const docTitle = getDocTitle(doc.type);
+
   if (action === "approve") {
     const { data: driverDocs } = await supabase
       .from("documents")
@@ -1909,6 +2277,71 @@ async function handleVerifyDocument(request: Request, adminId: string, docId: st
 
       await supabase.from("drivers").update({ status: "In Progress" }).eq("user_id", driverId);
     }
+
+    // Workflow 2: Document verified (approve) -> Email sent to driver
+    if (driverProfile?.email) {
+      const approveHtml = buildBrandedEmailHtml({
+        headline: "Document Approved & Verified",
+        badge: { text: "Compliance Verified", bg: "#ecfdf5", color: "#065f46", border: "#a7f3d0" },
+        greeting: `Hello ${driverProfile.full_name || "Driver"},`,
+        leadParagraph: `Good news! Your submitted <strong>${escapeHtml(docTitle)}</strong> has been reviewed and <strong>APPROVED</strong> by the BNT Logistics Compliance &amp; Safety team.`,
+        details: [
+          { label: "Document", value: docTitle },
+          { label: "Verification Status", value: "Approved" },
+          { label: "Expiry On File", value: body.expiresAt ? new Date(body.expiresAt).toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) : "Recorded / Valid" },
+          { label: "Verified Date", value: new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) }
+        ],
+        callout: {
+          text: "Your compliance file has been updated. If you have remaining induction sections or quizzes to finish, please log back into the portal to complete your onboarding.",
+          type: "success"
+        },
+        ctaButton: {
+          label: "Go to Driver Portal",
+          url: APP_URL,
+          color: "#10b981"
+        }
+      });
+
+      void sendEmailViaResend(
+        driverProfile.email,
+        `Document Approved: ${docTitle} — BNT Logistics Compliance`,
+        approveHtml
+      );
+    }
+  } else if (action === "reject") {
+    // Workflow 7: When admin reject documents -> Send email to driver
+    if (driverProfile?.email) {
+      const rejectionReason = body.reason?.trim() || "The uploaded document image was illegible, expired, or missing required compliance details.";
+
+      const rejectHtml = buildBrandedEmailHtml({
+        headline: "Action Required: Document Not Approved",
+        badge: { text: "Action Required", bg: "#fef2f2", color: "#991b1b", border: "#fecaca" },
+        greeting: `Hello ${driverProfile.full_name || "Driver"},`,
+        leadParagraph: `Your submitted <strong>${escapeHtml(docTitle)}</strong> could not be approved by BNT Logistics Compliance and requires your attention.`,
+        details: [
+          { label: "Document", value: docTitle },
+          { label: "Review Status", value: "Rejected / Needs Attention" },
+          { label: "Reason Given", value: rejectionReason },
+          { label: "Review Date", value: new Date().toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }) }
+        ],
+        callout: {
+          text: `<strong>What to do next:</strong> ${escapeHtml(rejectionReason)}<br><br>Please take a clear, well-lit photograph or scan of your original document and re-upload it through your driver portal.`,
+          type: "alert"
+        },
+        ctaButton: {
+          label: "Re-Upload Document Now",
+          url: `${APP_URL}/induction?step=2`,
+          color: "#2563eb"
+        },
+        secondaryNote: "If you need clarification regarding this requirement, please contact your depot supervisor or safety manager."
+      });
+
+      void sendEmailViaResend(
+        driverProfile.email,
+        `Action Required: ${docTitle} Not Approved — BNT Logistics Compliance`,
+        rejectHtml
+      );
+    }
   }
 
   await logAuditEntry(adminId, `admin_document_${action}d`, {
@@ -1920,8 +2353,69 @@ async function handleVerifyDocument(request: Request, adminId: string, docId: st
   return jsonResponse({
     success: true,
     message: `Document ${action === "approve" ? "approved" : "rejected"} successfully.`,
-    status: action === "approve" ? "approved" : "rejected"
+    status: action === "approve" ? "approved" : "rejected",
+    emailSent: Boolean(driverProfile?.email)
   });
+}
+
+// Workflow 6: Expiring document -> Email sent to driver
+async function handleNotifyDriverExpiry(request: Request, adminId: string): Promise<Response> {
+  const schema = z.object({
+    driverId: z.string().optional(),
+    driverEmail: z.string().email(),
+    driverName: z.string().optional(),
+    docType: z.string().min(1),
+    expiryDate: z.string().optional(),
+    daysRemaining: z.number().optional(),
+    urgency: z.string().optional()
+  });
+  const body = schema.parse(await request.json());
+  const days = body.daysRemaining ?? 0;
+  const isExpired = days < 0;
+  const urgencyText = isExpired ? "Expired" : days <= 14 ? "Urgent (< 14 Days)" : "Upcoming (< 30 Days)";
+  const badgeColor = isExpired
+    ? { bg: "#fef2f2", color: "#991b1b", border: "#fecaca" }
+    : days <= 14
+    ? { bg: "#fffbeb", color: "#92400e", border: "#fde68a" }
+    : { bg: "#eff6ff", color: "#1e40af", border: "#bfdbfe" };
+
+  const expiryHtml = buildBrandedEmailHtml({
+    headline: isExpired ? `Compliance Notice: ${body.docType} Has Expired` : `Compliance Notice: ${body.docType} Expiring Soon`,
+    badge: { text: urgencyText, ...badgeColor },
+    greeting: `Hello ${body.driverName || "Driver"},`,
+    leadParagraph: isExpired
+      ? `This is an urgent operational compliance notice from <strong>${ORGANIZATION_NAME}</strong>. Our records show that your <strong>${escapeHtml(body.docType)}</strong> expired <strong>${Math.abs(days)} day(s) ago</strong>.`
+      : `This is a compliance reminder from <strong>${ORGANIZATION_NAME}</strong> that your <strong>${escapeHtml(body.docType)}</strong> is due to expire in <strong>${days} day(s)</strong> (${escapeHtml(body.expiryDate || "soon")}).`,
+    details: [
+      { label: "Document", value: body.docType },
+      { label: "Expiry Date", value: body.expiryDate || "Recorded Expired" },
+      { label: "Days Remaining", value: isExpired ? `Expired (${Math.abs(days)} days ago)` : `${days} days` },
+      { label: "Compliance Status", value: isExpired ? "NON-COMPLIANT / GROUNDED" : "RENEWAL REQUIRED" }
+    ],
+    callout: {
+      text: "<strong>NHVAS Regulatory Requirement:</strong> All drivers must hold a current, valid licence and medical assessment prior to operating heavy vehicles in the fleet. Operating without current documentation is a breach of National Heavy Vehicle Law.",
+      type: isExpired ? "alert" : "warning"
+    },
+    ctaButton: {
+      label: "Upload Renewed Document Now",
+      url: `${APP_URL}/induction?step=2`,
+      color: isExpired ? "#ef4444" : "#f59e0b"
+    },
+    secondaryNote: "If you have already renewed this document with the issuing authority, please take a photo or scan and upload it immediately to clear your compliance record."
+  });
+
+  const subject = isExpired
+    ? `[URGENT] Document Expired: ${body.docType} — BNT Logistics Compliance`
+    : `[Compliance Notice] ${body.docType} Expiring in ${days} Days — BNT Logistics`;
+
+  await sendEmailViaResend(body.driverEmail, subject, expiryHtml);
+  await logAuditEntry(adminId, "admin_notified_driver_expiry", {
+    driverEmail: body.driverEmail,
+    docType: body.docType,
+    daysRemaining: days
+  });
+
+  return jsonResponse({ message: `Expiry reminder sent to ${body.driverEmail}`, emailSent: true });
 }
 
 async function handleNotify(request: Request, adminId: string): Promise<Response> {
@@ -2087,10 +2581,25 @@ export default async function handler(request: Request): Promise<Response> {
         return await handleGetVerificationQueue(adminId);
       }
 
+      // Document Expiry Notification
+      if (cleanPath === "admin/documents/notify-expiry" && method === "POST") {
+        return await handleNotifyDriverExpiry(request, adminId);
+      }
+
       // Approve / Reject a document
       const docVerifyMatch = cleanPath.match(/^admin\/documents\/([^/]+)\/verify$/);
       if (docVerifyMatch && method === "POST") {
         return await handleVerifyDocument(request, adminId, docVerifyMatch[1]);
+      }
+
+      const docApproveMatch = cleanPath.match(/^admin\/documents\/([^/]+)\/approve$/);
+      if (docApproveMatch && method === "POST") {
+        return await handleVerifyDocument(request, adminId, docApproveMatch[1], "approve");
+      }
+
+      const docRejectMatch = cleanPath.match(/^admin\/documents\/([^/]+)\/reject$/);
+      if (docRejectMatch && method === "POST") {
+        return await handleVerifyDocument(request, adminId, docRejectMatch[1], "reject");
       }
 
       // --- Induction Schedules ---

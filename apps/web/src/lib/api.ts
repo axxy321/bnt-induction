@@ -1141,6 +1141,28 @@ export const api = {
     await supabase.from("documents").update({ status: "rejected" }).eq("id", documentId);
   },
 
+  async notifyDriverExpiry(
+    session: SessionState,
+    data: {
+      driverId?: string;
+      driverEmail: string;
+      driverName?: string;
+      docType: string;
+      expiryDate?: string;
+      daysRemaining?: number;
+      urgency?: string;
+    }
+  ) {
+    return await adminRequest<{ message: string; emailSent: boolean }>(
+      "/admin/documents/notify-expiry",
+      session,
+      {
+        method: "POST",
+        body: JSON.stringify(data)
+      }
+    );
+  },
+
   async bulkImportDrivers(
     session: SessionState,
     drivers: Array<{ fullName: string; email: string; phone: string; address?: string; preferredLanguage?: string; password: string }>

@@ -97,6 +97,26 @@ export function AdminDashboard({
     };
   }, [session]);
 
+  const handleNotifyDriverExpiry = useCallback(
+    async (driverId: string, email: string, _message: string, item?: any) => {
+      try {
+        await api.notifyDriverExpiry(session, {
+          driverId,
+          driverEmail: email,
+          driverName: item?.driverName || "",
+          docType: item?.docType || "Compliance Document",
+          expiryDate: item?.expiryDateStr || "",
+          daysRemaining: item?.daysRemaining ?? 0,
+          urgency: item?.urgency || "Action Required"
+        });
+        alert(t("exp_alert_sent", { email }));
+      } catch (err: any) {
+        alert(err?.message || "Failed to dispatch expiry reminder notification.");
+      }
+    },
+    [session, t]
+  );
+
   const metrics = overview?.metrics || {
     totalDrivers: 0,
     completedDrivers: 0,
@@ -634,7 +654,10 @@ export function AdminDashboard({
 
       {/* Tab Panels */}
       {activeTab === "expiries" && (
-        <AdminExpiryMatrix drivers={overview?.drivers || []} />
+        <AdminExpiryMatrix
+          drivers={overview?.drivers || []}
+          onNotifyDriver={handleNotifyDriverExpiry}
+        />
       )}
 
       {activeTab === "activity" && (

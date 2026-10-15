@@ -15,7 +15,7 @@ import {
 
 interface AdminExpiryMatrixProps {
   drivers: AdminDriverRow[];
-  onNotifyDriver?: (driverId: string, email: string, message: string) => void;
+  onNotifyDriver?: (driverId: string, email: string, message: string, item?: ExpiryItem) => void;
 }
 
 interface ExpiryItem {
@@ -140,7 +140,8 @@ export const AdminExpiryMatrix: React.FC<AdminExpiryMatrixProps> = ({
       onNotifyDriver(
         item.driverId,
         item.driverEmail,
-        t("exp_notify_msg", { doc: item.docType })
+        t("exp_notify_msg", { doc: item.docType }),
+        item
       );
     } else {
       alert(t("exp_alert_sent", { email: item.driverEmail }));
