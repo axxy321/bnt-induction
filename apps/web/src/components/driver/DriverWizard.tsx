@@ -62,7 +62,7 @@ export function DriverWizard({
   return (
     <div className="induction-wizard w-full max-w-5xl mx-auto space-y-6">
       {/* High-Tech Stepper Header */}
-      <div className="induction-stepper bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+      <div className="induction-stepper bg-slate-900/90 backdrop-blur-2xl border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">

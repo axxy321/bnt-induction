@@ -99,7 +99,7 @@ export const DepotGatePassModal: React.FC<DepotGatePassModalProps> = ({
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl max-w-xs w-full min-w-0 my-auto overflow-hidden relative"
+          className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl max-w-xs w-full min-w-0 my-auto overflow-hidden relative responsive-modal-box max-h-[90vh] overflow-y-auto"
         >
           {/* Top Bar Header */}
           <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-slate-900 p-4 text-white flex items-center justify-between relative">

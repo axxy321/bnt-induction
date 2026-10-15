@@ -217,7 +217,7 @@ export function DriverTable({
   };
 
   return (
-    <div className="glass" style={{ padding: "28px", borderRadius: "20px" }}>
+    <div className="glass" style={{ padding: "clamp(14px, 3vw, 24px)", borderRadius: "16px" }}>
       {/* Table Toolbar */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
         <div>
@@ -298,10 +298,10 @@ export function DriverTable({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           autoComplete="off"
-          style={{ flex: 1, minWidth: "240px", padding: "8px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.88rem" }}
+          style={{ flex: 1, minWidth: "200px", padding: "8px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.88rem" }}
         />
 
-        <div style={{ display: "flex", gap: "4px", background: "rgba(148,163,184,0.1)", padding: "3px", borderRadius: "8px" }}>
+        <div className="responsive-nav-scroll" style={{ display: "flex", gap: "4px", background: "rgba(148,163,184,0.1)", padding: "3px", borderRadius: "8px", overflowX: "auto", maxWidth: "100%" }}>
           {["all", "Not Started", "In Progress", "Completed", "Archived"].map((st) => (
             <button
               key={st}
@@ -313,6 +313,8 @@ export function DriverTable({
                 cursor: "pointer",
                 fontWeight: 600,
                 fontSize: "0.8rem",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
                 background: filterStatus === st ? "#1e3a5f" : "transparent",
                 color: filterStatus === st ? "#ffffff" : "var(--color-muted)"
               }}
@@ -396,8 +398,8 @@ export function DriverTable({
       )}
 
       {/* Driver Table */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
+      <div className="responsive-table-wrapper">
+        <table style={{ width: "100%", minWidth: "760px", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
           <thead>
             <tr style={{ borderBottom: "2px solid var(--border, #e2e8f0)" }}>
               <th style={{ padding: "12px 10px", width: "40px" }}>
@@ -497,8 +499,8 @@ export function DriverTable({
                       <span style={{ color: "var(--color-muted)" }}>-</span>
                     )}
                   </td>
-                  <td style={{ padding: "12px 10px" }}>
-                    <div style={{ display: "flex", gap: "6px" }}>
+                  <td style={{ padding: "12px 10px", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", minWidth: "260px" }}>
                       {!isArchived && (
                         <button
                           type="button"
@@ -692,7 +694,7 @@ export function DriverTable({
           }}
         >
           <div
-            className="glass"
+            className="glass responsive-modal-box"
             style={{
               width: "100%",
               maxWidth: "420px",
@@ -781,7 +783,7 @@ export function DriverTable({
         }}
       >
         <div
-          className="glass"
+          className="glass responsive-modal-box"
           style={{
             width: "100%",
             maxWidth: "480px",
@@ -867,7 +869,7 @@ export function DriverTable({
         }}
       >
         <div
-          className="glass"
+          className="glass responsive-modal-box"
           style={{
             width: "100%",
             maxWidth: "680px",

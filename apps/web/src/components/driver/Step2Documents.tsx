@@ -195,7 +195,7 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
   };
 
   return (
-    <div className="glass" style={{ padding: "28px", borderRadius: "16px", maxWidth: "760px", margin: "0 auto" }}>
+    <div className="glass" style={{ padding: "clamp(14px, 4vw, 28px)", borderRadius: "16px", maxWidth: "760px", margin: "0 auto" }}>
       <div style={{ marginBottom: "24px" }}>
         <h3 style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 4px" }}>
           {t("s2_title")}
@@ -265,7 +265,7 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                padding: "16px 20px",
+                padding: "clamp(12px, 3vw, 18px)",
                 borderRadius: "12px",
                 border: dragging
                   ? "2px dashed #2563eb"
@@ -372,7 +372,7 @@ export function Step2Documents({ documents, onUpload, onContinue, loading }: Ste
                 </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                 {uploadCompleteType === req.type && (
                   <span className="document-upload-success" role="status">
                     <CheckCircle2 className="document-upload-success-icon" aria-hidden="true" />

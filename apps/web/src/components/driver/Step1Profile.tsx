@@ -133,7 +133,7 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
   const formatHint = LICENCE_FORMATS[formData.issuingState || "VIC"]?.hint;
 
   return (
-    <div className="glass" style={{ padding: "28px", borderRadius: "16px", maxWidth: "680px", margin: "0 auto" }}>
+    <div className="glass" style={{ padding: "clamp(16px, 4vw, 28px)", borderRadius: "16px", maxWidth: "680px", margin: "0 auto" }}>
       <div style={{ marginBottom: "20px" }}>
         <h3 style={{ fontSize: "1.3rem", fontWeight: 700, margin: "0 0 4px" }}>
           {t("s1_title")}
@@ -144,7 +144,7 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-3.5">
           <div>
             <label htmlFor="driver-fullName" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               {t("s1_full_name")}
@@ -183,7 +183,7 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "14px" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-3.5">
           <div>
             <label htmlFor="driver-phone" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               {t("s1_phone")}
@@ -223,7 +223,7 @@ export function Step1Profile({ driver, onSave, loading }: Step1ProfileProps) {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3.5">
           <div>
             <label htmlFor="driver-licenceClass" className="form-label" style={{ display: "block", fontSize: "0.82rem", fontWeight: 600, marginBottom: "4px" }}>
               {t("s1_licence_class")}

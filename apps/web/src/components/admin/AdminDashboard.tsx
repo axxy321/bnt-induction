@@ -130,8 +130,8 @@ export function AdminDashboard({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "16px",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: "12px",
           marginBottom: "24px"
         }}
       >
@@ -216,9 +216,37 @@ export function AdminDashboard({
       </div>
       </FadeIn>
 
+      {/* Mobile Tab Quick Dropdown */}
+      <div className="md:hidden mb-3">
+        <label htmlFor="admin-tab-select" className="sr-only">Select Admin Section</label>
+        <select
+          id="admin-tab-select"
+          value={activeTab}
+          onChange={(e) => setActiveTab(e.target.value as any)}
+          className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-bold text-sm"
+        >
+          <option value="drivers">{t("adm_tab_drivers")}</option>
+          <option value="passwordHelp">{t("adm_tab_password_help")} ({passwordHelpCount})</option>
+          <option value="verification">{t("adm_tab_verification")} ({pendingDocsCount})</option>
+          <option value="cms">{t("adm_tab_cms")}</option>
+          <option value="expiries">{t("adm_tab_expiries")}</option>
+          <option value="activity">{t("adm_tab_activity")}</option>
+          <option value="incidents">{t("adm_tab_incidents")}</option>
+          <option value="pretrip">{t("adm_tab_pretrip")}</option>
+          <option value="audits">{t("adm_tab_audits")}</option>
+          <option value="sops">{t("adm_tab_sops")}</option>
+          <option value="fleet">{t("adm_tab_fleet")}</option>
+          <option value="contractors">{t("adm_tab_contractors")}</option>
+          <option value="branding">{t("adm_tab_branding")}</option>
+          <option value="policies">{t("adm_tab_policies")}</option>
+          <option value="schedules">{t("adm_tab_schedules")}</option>
+          <option value="reports">{t("reports_title")}</option>
+        </select>
+      </div>
+
       {/* Navigation Tabs */}
       <div
-        className="glass admin-nav-tabs"
+        className="glass admin-nav-tabs responsive-nav-scroll"
         style={{
           padding: "8px 12px",
           borderRadius: "14px",
@@ -226,26 +254,26 @@ export function AdminDashboard({
           display: "flex",
           gap: "8px",
           alignItems: "center",
-          overflowX: "auto",
-          maxWidth: "100%",
-          WebkitOverflowScrolling: "touch"
+          maxWidth: "100%"
         }}
       >
         <button
           type="button"
           onClick={() => setActiveTab("drivers")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "drivers" ? "#1e3a5f" : "transparent",
             color: activeTab === "drivers" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <Users className="w-4 h-4" /> {t("adm_tab_drivers")}
@@ -255,17 +283,19 @@ export function AdminDashboard({
           onClick={() => setActiveTab("passwordHelp")}
           aria-label={t("adm_tab_password_help")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "passwordHelp" ? "#1e3a5f" : "transparent",
             color: activeTab === "passwordHelp" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <KeyRound className="w-4 h-4" /> {t("adm_tab_password_help")}
@@ -275,17 +305,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("verification")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "verification" ? "#1e3a5f" : "transparent",
             color: activeTab === "verification" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <FileCheck className="w-4 h-4" /> {t("adm_tab_verification")}
@@ -299,17 +331,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("cms")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "cms" ? "#1e3a5f" : "transparent",
             color: activeTab === "cms" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <Settings className="w-4 h-4" /> {t("adm_tab_cms")}
@@ -319,17 +353,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("expiries")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "expiries" ? "#1e3a5f" : "transparent",
             color: activeTab === "expiries" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <CalendarClock className="w-4 h-4" /> {t("adm_tab_expiries")}
@@ -338,17 +374,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("activity")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "activity" ? "#1e3a5f" : "transparent",
             color: activeTab === "activity" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <Activity className="w-4 h-4" /> {t("adm_tab_activity")}
@@ -357,17 +395,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("incidents")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "incidents" ? "#1e3a5f" : "transparent",
             color: activeTab === "incidents" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <AlertTriangle className="w-4 h-4" /> {t("adm_tab_incidents")}
@@ -377,17 +417,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("pretrip")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "pretrip" ? "#1e3a5f" : "transparent",
             color: activeTab === "pretrip" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <ClipboardCheck className="w-4 h-4" /> {t("adm_tab_pretrip")}
@@ -397,17 +439,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("audits")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "audits" ? "#1e3a5f" : "transparent",
             color: activeTab === "audits" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <ClipboardList className="w-4 h-4" /> {t("adm_tab_audits")}
@@ -417,17 +461,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("sops")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "sops" ? "#1e3a5f" : "transparent",
             color: activeTab === "sops" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <GraduationCap className="w-4 h-4" /> {t("adm_tab_sops")}
@@ -437,17 +483,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("fleet")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "fleet" ? "#1e3a5f" : "transparent",
             color: activeTab === "fleet" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <Truck className="w-4 h-4" /> {t("adm_tab_fleet")}
@@ -457,17 +505,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("contractors")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "contractors" ? "#1e3a5f" : "transparent",
             color: activeTab === "contractors" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <Building2 className="w-4 h-4" /> {t("adm_tab_contractors")}
@@ -477,17 +527,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("branding")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "branding" ? "#1e3a5f" : "transparent",
             color: activeTab === "branding" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <Palette className="w-4 h-4" /> {t("adm_tab_branding")}
@@ -497,17 +549,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("policies")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "policies" ? "#1e3a5f" : "transparent",
             color: activeTab === "policies" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <ScrollText className="w-4 h-4" /> {t("adm_tab_policies")}
@@ -517,17 +571,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("schedules")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "schedules" ? "#1e3a5f" : "transparent",
             color: activeTab === "schedules" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <CalendarClock className="w-4 h-4" /> {t("adm_tab_schedules")}
@@ -537,17 +593,19 @@ export function AdminDashboard({
           type="button"
           onClick={() => setActiveTab("reports")}
           style={{
-            padding: "10px 20px",
+            padding: "9px 16px",
             borderRadius: "10px",
             border: "none",
             background: activeTab === "reports" ? "#1e3a5f" : "transparent",
             color: activeTab === "reports" ? "#ffffff" : "var(--color-muted)",
             fontWeight: 700,
-            fontSize: "0.88rem",
+            fontSize: "0.85rem",
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px"
+            gap: "8px",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <BarChart3 className="w-4 h-4" /> {t("reports_title")}
@@ -565,7 +623,9 @@ export function AdminDashboard({
             background: "transparent",
             cursor: "pointer",
             fontWeight: 600,
-            fontSize: "0.82rem"
+            fontSize: "0.82rem",
+            whiteSpace: "nowrap",
+            flexShrink: 0
           }}
         >
           <RefreshCw className="w-3.5 h-3.5" /> {t("adm_refresh")}

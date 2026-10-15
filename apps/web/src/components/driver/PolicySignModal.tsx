@@ -53,6 +53,7 @@ export function PolicySignModal({ policy, session, onClose, onSigned }: PolicySi
       }}
     >
       <div
+        className="responsive-modal-box"
         style={{
           width: "100%",
           maxWidth: "560px",
@@ -61,7 +62,7 @@ export function PolicySignModal({ policy, session, onClose, onSigned }: PolicySi
           background: "#0f172a",
           border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: "20px",
-          padding: "28px"
+          padding: "clamp(16px, 4vw, 28px)"
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>

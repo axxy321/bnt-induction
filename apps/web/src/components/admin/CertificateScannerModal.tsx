@@ -110,7 +110,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl relative">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl relative responsive-modal-box max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -162,7 +162,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
             <label htmlFor="scanner-code-input" className="block text-xs font-bold text-slate-300 mb-2">
               {t("csm_manual_label")}
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 id="scanner-code-input"
                 name="verificationCode"
@@ -182,7 +182,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
                 type="button"
                 onClick={() => void handleVerify(inputCode)}
                 disabled={verifying || !inputCode.trim()}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg flex items-center gap-1.5 shrink-0"
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-lg flex items-center justify-center gap-1.5 shrink-0"
               >
                 <Search className="w-4 h-4" />
                 {verifying ? t("csm_checking") : t("csm_verify")}
@@ -213,7 +213,7 @@ export const CertificateScannerModal: React.FC<CertificateScannerModalProps> = (
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60">
                   <span className="text-slate-400 block text-[11px] font-medium flex items-center gap-1 mb-1">
                     <UserCheck className="w-3.5 h-3.5 text-indigo-400" /> {t("csm_driver_name")}

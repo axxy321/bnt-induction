@@ -88,11 +88,11 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
       }}
     >
       <div
-        className="glass"
+        className="glass responsive-modal-box"
         style={{
           width: "100%",
           maxWidth: "580px",
-          padding: "28px",
+          padding: "clamp(16px, 4vw, 28px)",
           borderRadius: "20px",
           maxHeight: "90vh",
           overflowY: "auto"
@@ -133,7 +133,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
                 {t("drf_full_name")}
@@ -165,7 +165,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
                 {t("drf_phone")}
@@ -199,7 +199,7 @@ export function DriverFormModal({ driver, onSave, onClose, loading }: DriverForm
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3">
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: "4px" }}>
                 {t("drf_licence_class")}

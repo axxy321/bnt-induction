@@ -117,7 +117,7 @@ export const ComplianceDashboardView: React.FC<ComplianceDashboardViewProps> = (
       {/* Policy Signature Banner */}
       {unsignedPolicies.length > 0 && onSignPolicy && (
         <div
-          className="bg-amber-500/10 border border-amber-500/40 p-4 md:p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 animate-fadeIn"
+          className="bg-amber-500/10 border border-amber-500/40 p-4 md:p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn"
           style={{ boxShadow: "0 8px 30px rgba(217,119,6,0.12)" }}
         >
           <div className="flex items-center gap-3">
@@ -136,7 +136,7 @@ export const ComplianceDashboardView: React.FC<ComplianceDashboardViewProps> = (
           <button
             type="button"
             onClick={() => onSignPolicy(unsignedPolicies[0])}
-            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-lg flex items-center gap-2 shrink-0"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-lg flex items-center justify-center gap-2 shrink-0"
           >
             <FileSignature className="w-4 h-4" />
             {t("policy_banner_sign")}
@@ -357,8 +357,8 @@ export const ComplianceDashboardView: React.FC<ComplianceDashboardViewProps> = (
                 {t("dash_no_docs")}
               </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
+            <div className="responsive-table-wrapper">
+              <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
                 <thead className="text-xs uppercase bg-slate-800/80 text-slate-400 border-b border-slate-700">
                   <tr>
                     <th className="py-3 px-4 font-semibold">{t("dash_th_name")}</th>

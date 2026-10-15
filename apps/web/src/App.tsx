@@ -526,39 +526,39 @@ function AppContent() {
         </div>
       )}
       {/* Global Modern Top Header & Navigation */}
-      <header className="app-header sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-4 md:px-8 py-3 transition-all">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+      <header className="app-header sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/60 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3 transition-all">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4 flex-wrap">
           {/* Logo & Platform Name */}
-          <div className="flex items-center gap-3">
-            <img src={branding?.logoUrl || bntLogo} alt={branding?.companyName || "BNT Logistics"} className="h-9 w-auto object-contain" />
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <img src={branding?.logoUrl || bntLogo} alt={branding?.companyName || "BNT Logistics"} className="h-8 sm:h-9 w-auto object-contain" />
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-extrabold text-white tracking-tight">{branding?.companyName || "BNT LOGISTICS"}</span>
-                <span className="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
+                <span className="text-sm sm:text-base font-extrabold text-white tracking-tight">{branding?.companyName || "BNT LOGISTICS"}</span>
+                <span className="hidden lg:inline-block px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
                   {t("compliance_portal")}
                 </span>
               </div>
-              <span className="text-xs text-slate-400 block font-medium">{t("platform_subtitle")}</span>
+              <span className="text-[11px] sm:text-xs text-slate-400 block font-medium line-clamp-1">{t("platform_subtitle")}</span>
             </div>
           </div>
 
           {/* User Controls & Mobile Toggle */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
             {session && session.user.role === "driver" && (
               <button
                 type="button"
                 onClick={() => setGatePassOpen(true)}
-                className="hidden sm:flex px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-colors items-center gap-1.5"
+                className="hidden md:flex px-2.5 sm:px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-colors items-center gap-1.5 shrink-0"
               >
                 <QrCode className="w-3.5 h-3.5" /> {t("gate_pass")}
               </button>
             )}
             {/* Language Switcher — English / ਪੰਜਾਬੀ */}
-            <div className="flex items-center rounded-lg bg-slate-800 border border-slate-700 overflow-hidden">
+            <div className="flex items-center rounded-lg bg-slate-800 border border-slate-700 overflow-hidden shrink-0">
               <button
                 type="button"
                 onClick={() => setAppLanguage("en")}
-                className={`px-2.5 py-1.5 text-[11px] font-black transition-colors ${
+                className={`px-2 sm:px-2.5 py-1 sm:py-1.5 text-[11px] font-black transition-colors ${
                   i18n.language === "en" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"
                 }`}
               >
@@ -567,7 +567,7 @@ function AppContent() {
               <button
                 type="button"
                 onClick={() => setAppLanguage("pa")}
-                className={`px-2.5 py-1.5 text-[11px] font-black transition-colors ${
+                className={`px-2 sm:px-2.5 py-1 sm:py-1.5 text-[11px] font-black transition-colors ${
                   i18n.language === "pa" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"
                 }`}
               >
@@ -577,16 +577,16 @@ function AppContent() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition-colors flex items-center gap-1.5 shrink-0"
             >
               {theme === "light" ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
-              <span>{theme === "light" ? t("dark") : t("light")}</span>
+              <span className="hidden sm:inline">{theme === "light" ? t("dark") : t("light")}</span>
             </button>
 
             {session && (
-              <div className="flex items-center gap-3">
-                <div className="hidden md:block text-right">
-                  <span className="text-xs font-bold text-white block">{driverBundle?.driver?.fullName || session.user.email}</span>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="hidden lg:block text-right">
+                  <span className="text-xs font-bold text-white block truncate max-w-[140px]">{driverBundle?.driver?.fullName || session.user.email}</span>
                   <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider block">
                     {session.user.role === "admin" ? t("admin_role") : t("driver_role")}
                   </span>
@@ -594,10 +594,10 @@ function AppContent() {
                 <button
                   type="button"
                   onClick={() => void handleSignOut()}
-                  className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+                  className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-colors shadow-md flex items-center gap-1.5 shrink-0"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>{t("sign_out")}</span>
+                  <span className="hidden sm:inline">{t("sign_out")}</span>
                 </button>
               </div>
             )}
@@ -606,7 +606,8 @@ function AppContent() {
             {session && session.user.role === "driver" && (
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden p-2 rounded-lg bg-slate-800 text-slate-200 hover:text-white border border-slate-700"
+                className="md:hidden p-1.5 sm:p-2 rounded-lg bg-slate-800 text-slate-200 hover:text-white border border-slate-700 shrink-0"
+                aria-label="Toggle Navigation Menu"
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -614,13 +615,13 @@ function AppContent() {
           </div>
         </div>
 
-        {/* Secondary Navigation Row — full tab bar below the brand row */}
+        {/* Secondary Navigation Row — scrollable pill bar on tablets and laptops */}
         {session && session.user.role === "driver" && (
-          <div className="max-w-7xl mx-auto mt-4">
-            <nav className="hidden md:flex items-center justify-center gap-1 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800 shadow-inner overflow-x-auto">
+          <div className="max-w-7xl mx-auto mt-2 sm:mt-3">
+            <nav className="hidden md:flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800 shadow-inner overflow-x-auto responsive-nav-scroll">
               <button
                 onClick={() => setActiveTab("dashboard")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "dashboard" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -628,7 +629,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("schedule")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "schedule" ? "bg-amber-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -636,7 +637,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("induction")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "induction" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -644,7 +645,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("documents")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "documents" ? "bg-purple-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -652,7 +653,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("audits")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "audits" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -660,7 +661,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("vehicles")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "vehicles" ? "bg-amber-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -668,7 +669,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("contractor")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "contractor" ? "bg-indigo-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -676,7 +677,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("incidents")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "incidents" ? "bg-rose-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -684,7 +685,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("pretrip")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "pretrip" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -692,7 +693,7 @@ function AppContent() {
               </button>
               <button
                 onClick={() => setActiveTab("checkin")}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
                   activeTab === "checkin" ? "bg-emerald-600 text-white shadow-md" : "text-slate-300 hover:text-white hover:bg-slate-800"
                 }`}
               >
@@ -704,73 +705,90 @@ function AppContent() {
 
         {/* Mobile Navigation Drawer */}
         {session && session.user.role === "driver" && mobileMenuOpen && (
-          <div className="md:hidden mt-3 pt-3 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 animate-fadeIn">
-            <button
-              onClick={() => { setActiveTab("dashboard"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "dashboard" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <LayoutDashboard className="w-4 h-4" /> {t("nav_dashboard")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("schedule"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "schedule" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <CalendarClock className="w-4 h-4" /> {t("nav_schedule")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("induction"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "induction" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <GraduationCap className="w-4 h-4" /> {t("nav_induction")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("documents"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "documents" ? "bg-purple-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <FileText className="w-4 h-4" /> {t("nav_vault")} ({complianceDocs.length})
-            </button>
-            <button
-              onClick={() => { setActiveTab("audits"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "audits" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <ClipboardCheck className="w-4 h-4" /> {t("nav_audits")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("vehicles"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "vehicles" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <Truck className="w-4 h-4" /> {t("nav_fleet")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("contractor"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "contractor" ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <Building2 className="w-4 h-4" /> {t("nav_contractor")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("incidents"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "incidents" ? "bg-rose-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <AlertTriangle className="w-4 h-4" /> {t("nav_hazards")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("pretrip"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "pretrip" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <ClipboardList className="w-4 h-4 text-emerald-400" /> {t("nav_pretrip")}
-            </button>
-            <button
-              onClick={() => { setActiveTab("checkin"); setMobileMenuOpen(false); }}
-              className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "checkin" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
-            >
-              <MapPin className="w-4 h-4" /> {t("nav_checkin")}
-            </button>
-            <button
-              onClick={() => { setGatePassOpen(true); setMobileMenuOpen(false); }}
-              className="p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
-            >
-              <QrCode className="w-4 h-4" /> {t("view_gate_pass")}
-            </button>
+          <div className="md:hidden mt-3 pt-3 border-t border-slate-800 space-y-3 animate-fadeIn">
+            {/* Quick Profile & Gate Pass in Mobile Menu */}
+            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800">
+              <div>
+                <span className="text-xs font-bold text-white block">{driverBundle?.driver?.fullName || session.user.email}</span>
+                <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">{t("driver_role")}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setGatePassOpen(true); setMobileMenuOpen(false); }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-black text-xs flex items-center gap-1.5"
+              >
+                <QrCode className="w-3.5 h-3.5" /> {t("gate_pass")}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                onClick={() => { setActiveTab("dashboard"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "dashboard" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <LayoutDashboard className="w-4 h-4" /> {t("nav_dashboard")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("schedule"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "schedule" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <CalendarClock className="w-4 h-4" /> {t("nav_schedule")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("induction"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "induction" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <GraduationCap className="w-4 h-4" /> {t("nav_induction")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("documents"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "documents" ? "bg-purple-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <FileText className="w-4 h-4" /> {t("nav_vault")} ({complianceDocs.length})
+              </button>
+              <button
+                onClick={() => { setActiveTab("audits"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "audits" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <ClipboardCheck className="w-4 h-4" /> {t("nav_audits")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("vehicles"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "vehicles" ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <Truck className="w-4 h-4" /> {t("nav_fleet")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("contractor"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "contractor" ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <Building2 className="w-4 h-4" /> {t("nav_contractor")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("incidents"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "incidents" ? "bg-rose-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <AlertTriangle className="w-4 h-4" /> {t("nav_hazards")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("pretrip"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "pretrip" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <ClipboardList className="w-4 h-4 text-emerald-400" /> {t("nav_pretrip")}
+              </button>
+              <button
+                onClick={() => { setActiveTab("checkin"); setMobileMenuOpen(false); }}
+                className={`p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 ${activeTab === "checkin" ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-300"}`}
+              >
+                <MapPin className="w-4 h-4" /> {t("nav_checkin")}
+              </button>
+              <button
+                onClick={() => { setGatePassOpen(true); setMobileMenuOpen(false); }}
+                className="p-2.5 rounded-lg text-xs font-bold text-left flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 col-span-2"
+              >
+                <QrCode className="w-4 h-4" /> {t("view_gate_pass")}
+              </button>
+            </div>
           </div>
         )}
       </header>
