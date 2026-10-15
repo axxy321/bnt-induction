@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Users, FileCheck, Settings, RefreshCw, CalendarClock, Activity, AlertTriangle, ClipboardCheck, ClipboardList, GraduationCap, Truck, Building2, Palette, ScrollText, BarChart3, KeyRound, ShieldCheck } from "lucide-react";
 import { AdminOverview, BrandingSettings } from "../../types";
@@ -71,6 +71,13 @@ export function AdminDashboard({
   const [activeTab, setActiveTab] = useState<"drivers" | "passwordHelp" | "verification" | "cms" | "expiries" | "activity" | "incidents" | "pretrip" | "audits" | "sops" | "fleet" | "contractors" | "branding" | "policies" | "schedules" | "reports">("drivers");
   const [passwordHelpCount, setPasswordHelpCount] = useState(0);
   const updatePasswordHelpCount = useCallback((count: number) => setPasswordHelpCount(count), []);
+
+  const pendingDocsCount = useMemo(() => {
+    return (overview?.drivers || []).reduce((acc, driver) => {
+      const pendingInDriver = (driver.documents || []).filter((doc: any) => doc.status === "pending").length;
+      return acc + pendingInDriver;
+    }, 0);
+  }, [overview?.drivers]);
 
   useEffect(() => {
     let mounted = true;
@@ -282,6 +289,11 @@ export function AdminDashboard({
           }}
         >
           <FileCheck className="w-4 h-4" /> {t("adm_tab_verification")}
+          {pendingDocsCount > 0 && (
+            <span style={{ minWidth: "20px", padding: "2px 6px", borderRadius: "999px", background: "#f59e0b", color: "#000", fontWeight: 700, fontSize: "0.7rem", textAlign: "center" }}>
+              {pendingDocsCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -652,7 +664,7 @@ export function AdminDashboard({
         <PasswordHelpRequestsAdmin session={session} onPendingCountChange={updatePasswordHelpCount} />
       )}
 
-      {activeTab === "verification" && <VerificationQueue />}
+      {activeTab === "verification" && <VerificationQueue onRefresh={onRefresh} />}
 
       {activeTab === "cms" && <AdminCMS />}
 

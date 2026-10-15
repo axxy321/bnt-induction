@@ -897,7 +897,7 @@ app.get("/api/admin/verification-queue", requireAdmin, async (_request, response
   try {
     const { data: documents, error } = await supabaseAdmin
       .from("documents")
-      .select("id, user_id, type, file_name, mime_type, status, uploaded_at, expires_at, profiles!inner(full_name, email)")
+      .select("id, user_id, file_url, type, file_name, mime_type, status, uploaded_at, expires_at, profiles!documents_user_id_fkey(full_name, email)")
       .eq("status", "pending")
       .order("uploaded_at", { ascending: false });
 

@@ -1776,11 +1776,13 @@ async function handleExportReports(url: URL, adminId: string): Promise<Response>
 async function handleGetVerificationQueue(adminId: string): Promise<Response> {
   const supabase = getSupabaseAdmin();
 
+  let docs: any[] = [];
   const { data, error } = await supabase
     .from("documents")
     .select(`
       id,
       user_id,
+      file_url,
       type,
       file_name,
       mime_type,
@@ -1788,19 +1790,61 @@ async function handleGetVerificationQueue(adminId: string): Promise<Response> {
       verified_by_admin,
       uploaded_at,
       expires_at,
-      profiles!inner(full_name, email)
+      profiles!documents_user_id_fkey(full_name, email)
     `)
     .eq("status", "pending")
     .order("uploaded_at", { ascending: true });
 
-  if (error) throw error;
+  if (!error && Array.isArray(data)) {
+    docs = data;
+  } else {
+    // Resilient fallback: fetch documents and profiles separately
+    const { data: rawDocs } = await supabase
+      .from("documents")
+      .select("id, user_id, file_url, type, file_name, mime_type, status, verified_by_admin, uploaded_at, expires_at")
+      .eq("status", "pending")
+      .order("uploaded_at", { ascending: true });
 
-  return jsonResponse({ documents: data ?? [] });
+    if (Array.isArray(rawDocs) && rawDocs.length > 0) {
+      const userIds = [...new Set(rawDocs.map((d: any) => d.user_id))];
+      const { data: userProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+      const profileMap = new Map((userProfiles ?? []).map((p: any) => [p.id, p]));
+      docs = rawDocs.map((d: any) => ({
+        ...d,
+        profiles: profileMap.get(d.user_id) ?? { full_name: null, email: null }
+      }));
+    }
+  }
+
+  // Generate signed URLs so admin can view/download each document securely
+  const enrichedDocs = await Promise.all(docs.map(async (doc: any) => {
+    let signedUrl = "";
+    if (doc.file_url) {
+      try {
+        const { data: urlData } = await supabase.storage.from("driver-documents").createSignedUrl(doc.file_url, 3600);
+        signedUrl = urlData?.signedUrl ?? "";
+      } catch {}
+    }
+    return {
+      ...doc,
+      signed_url: signedUrl
+    };
+  }));
+
+  return jsonResponse({ documents: enrichedDocs });
 }
 
 async function handleVerifyDocument(request: Request, adminId: string, docId: string): Promise<Response> {
   const supabase = getSupabaseAdmin();
-  const { action } = await request.json() as { action: "approve" | "reject" };
+  const body = (await request.json().catch(() => ({}))) as {
+    action?: "approve" | "reject";
+    expiresAt?: string;
+    reason?: string;
+  };
+  const action = body.action;
 
   if (action !== "approve" && action !== "reject") {
     return errorResponse("Action must be 'approve' or 'reject'.", 400);
@@ -1815,12 +1859,23 @@ async function handleVerifyDocument(request: Request, adminId: string, docId: st
 
   const driverId = doc.user_id;
 
+  const updatePayload: Record<string, any> = {
+    status: action === "approve" ? "approved" : "rejected",
+    verified_by_admin: action === "approve",
+    verified_at: new Date().toISOString(),
+    verified_by_user_id: adminId
+  };
+
+  if (action === "approve" && body.expiresAt) {
+    updatePayload.expires_at = body.expiresAt;
+  }
+  if (action === "reject" && body.reason) {
+    updatePayload.rejection_reason = body.reason;
+  }
+
   const { error: updateError } = await supabase
     .from("documents")
-    .update({
-      status: action === "approve" ? "approved" : "rejected",
-      verified_by_admin: action === "approve"
-    })
+    .update(updatePayload)
     .eq("id", docId);
   if (updateError) throw updateError;
 
@@ -1830,12 +1885,12 @@ async function handleVerifyDocument(request: Request, adminId: string, docId: st
       .select("type, status")
       .eq("user_id", driverId);
 
-    const requiredTypes = ["driver_license", "medical_certificate", "identity_proof"];
-    const allApproved = requiredTypes.every((type) =>
-      (driverDocs ?? []).some((d: any) => d.type === type && d.status === "approved")
-    );
+    // Required types in Step 2: driver_license, medical_certificate, and right_to_work (or legacy identity_proof)
+    const hasLicence = (driverDocs ?? []).some((d: any) => d.type === "driver_license" && d.status === "approved");
+    const hasMedical = (driverDocs ?? []).some((d: any) => d.type === "medical_certificate" && d.status === "approved");
+    const hasRtw = (driverDocs ?? []).some((d: any) => (d.type === "right_to_work" || d.type === "identity_proof") && d.status === "approved");
 
-    if (allApproved) {
+    if (hasLicence && hasMedical && hasRtw) {
       const { data: progress } = await supabase
         .from("induction_progress")
         .select("completed_step_ids, current_step")
@@ -1844,16 +1899,15 @@ async function handleVerifyDocument(request: Request, adminId: string, docId: st
 
       const completedSteps: number[] = progress?.completed_step_ids ?? [];
       if (!completedSteps.includes(1)) completedSteps.push(1);
+      if (!completedSteps.includes(2)) completedSteps.push(2);
 
-      const { error: progressErr } = await supabase.from("induction_progress").update({
-        current_step: Math.max(progress?.current_step ?? 1, 2),
+      await supabase.from("induction_progress").update({
+        current_step: Math.max(progress?.current_step ?? 1, 3),
         completed_step_ids: completedSteps.sort((a, b) => a - b),
         updated_at: new Date().toISOString()
       }).eq("user_id", driverId);
-      if (progressErr) throw new Error(`Failed to advance driver progress: ${progressErr.message}`);
 
-      const { error: statusErr } = await supabase.from("drivers").update({ status: "In Progress" }).eq("user_id", driverId);
-      if (statusErr) throw new Error(`Failed to update driver status: ${statusErr.message}`);
+      await supabase.from("drivers").update({ status: "In Progress" }).eq("user_id", driverId);
     }
   }
 
@@ -1864,7 +1918,9 @@ async function handleVerifyDocument(request: Request, adminId: string, docId: st
   });
 
   return jsonResponse({
-    message: `Document ${action === "approve" ? "approved" : "rejected"} successfully.`
+    success: true,
+    message: `Document ${action === "approve" ? "approved" : "rejected"} successfully.`,
+    status: action === "approve" ? "approved" : "rejected"
   });
 }
 

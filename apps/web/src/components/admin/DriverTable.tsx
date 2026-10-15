@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, Search, CheckCircle2, AlertCircle, QrCode, KeyRound, X, Check, Archive, RotateCcw, ShieldX } from "lucide-react";
+import { Download, Search, CheckCircle2, AlertCircle, QrCode, KeyRound, X, Check, Archive, RotateCcw, ShieldX, FileText, Eye, ExternalLink } from "lucide-react";
 import { AdminDriverRow, DriverFormInput } from "../../types";
 import type { DriverCreateResult } from "../../state/AppContext";
 import { tStatus } from "../../i18n";
@@ -45,6 +45,7 @@ export function DriverTable({
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedDriver, setSelectedDriver] = useState<AdminDriverRow | null>(null);
+  const [selectedDocsDriver, setSelectedDocsDriver] = useState<AdminDriverRow | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [resetPassDriverId, setResetPassDriverId] = useState<string | null>(null);
@@ -509,6 +510,27 @@ export function DriverTable({
                       )}
                       <button
                         type="button"
+                        onClick={() => setSelectedDocsDriver(d)}
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          background: "transparent",
+                          cursor: "pointer",
+                          fontSize: "0.78rem",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}
+                        title="View driver uploaded documents"
+                      >
+                        <FileText className="w-3 h-3 text-indigo-400" /> Docs ({d.documents?.length || 0})
+                        {d.documents?.some((doc) => doc.status === "pending") && (
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
+                        )}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => {
                           setResetPassDriverId(d.id);
                           setNewPasswordText("");
@@ -821,6 +843,155 @@ export function DriverTable({
             >
               {revoking ? "⟳" : <ShieldX className="w-4 h-4" />}
               {revoking ? t("dt_revoking") : t("dt_revoke_confirm")}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {selectedDocsDriver && (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0, 0, 0, 0.65)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 100,
+          padding: "16px"
+        }}
+      >
+        <div
+          className="glass"
+          style={{
+            width: "100%",
+            maxWidth: "680px",
+            maxHeight: "90vh",
+            overflowY: "auto",
+            padding: "26px",
+            borderRadius: "20px",
+            background: "var(--bg-elevated, #1e293b)",
+            border: "1px solid var(--border, #334155)"
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <div>
+              <h3 style={{ margin: "0 0 4px", fontSize: "1.2rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px" }}>
+                <FileText className="w-5 h-5 text-indigo-400" />
+                {selectedDocsDriver.fullName} — Uploaded Documents
+              </h3>
+              <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>
+                {selectedDocsDriver.email} • {selectedDocsDriver.depotLocation || "Melbourne Hub"}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedDocsDriver(null)}
+              style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--color-muted)", padding: "4px" }}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "16px" }}>
+            {(!selectedDocsDriver.documents || selectedDocsDriver.documents.length === 0) ? (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--color-muted)" }}>
+                <AlertCircle className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+                <p style={{ margin: 0, fontWeight: 600 }}>No documents uploaded by this driver yet.</p>
+                <p style={{ margin: "4px 0 0", fontSize: "0.8rem" }}>When the driver uploads their licence or medical certificates, they will appear here.</p>
+              </div>
+            ) : (
+              selectedDocsDriver.documents.map((doc) => {
+                const statusColor = doc.status === "approved" ? "#22c55e" : doc.status === "rejected" ? "#ef4444" : "#f59e0b";
+                return (
+                  <div
+                    key={doc.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      padding: "14px 16px",
+                      borderRadius: "12px",
+                      background: "rgba(255, 255, 255, 0.03)",
+                      border: "1px solid var(--border, rgba(255, 255, 255, 0.08))",
+                      flexWrap: "wrap"
+                    }}
+                  >
+                    <div style={{ minWidth: "200px" }}>
+                      <strong style={{ fontSize: "0.92rem", textTransform: "capitalize", display: "block" }}>
+                        {doc.type ? doc.type.replace(/_/g, " ") : "Document"}
+                      </strong>
+                      <div className="muted" style={{ fontSize: "0.78rem" }}>
+                        {doc.name || "Uploaded file"} {doc.size ? `• ${(doc.size / 1024).toFixed(1)} KB` : ""}
+                      </div>
+                    </div>
+
+                    <span
+                      style={{
+                        padding: "3px 10px",
+                        borderRadius: "999px",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        background: `${statusColor}20`,
+                        color: statusColor,
+                        textTransform: "capitalize"
+                      }}
+                    >
+                      {doc.status || "pending"}
+                    </span>
+
+                    {doc.fileUrl ? (
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(99,102,241,0.3)",
+                          background: "rgba(99,102,241,0.1)",
+                          color: "#818cf8",
+                          fontWeight: 600,
+                          fontSize: "0.8rem",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          textDecoration: "none"
+                        }}
+                      >
+                        <Eye className="w-3.5 h-3.5" /> View File <ExternalLink className="w-3 h-3 opacity-70" />
+                      </a>
+                    ) : (
+                      <span className="muted" style={{ fontSize: "0.78rem" }}>File link pending</span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "24px" }}>
+            <button
+              type="button"
+              onClick={() => setSelectedDocsDriver(null)}
+              style={{
+                padding: "8px 18px",
+                borderRadius: "8px",
+                border: "1px solid var(--border, #cbd5e1)",
+                background: "transparent",
+                color: "inherit",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "0.85rem"
+              }}
+            >
+              Close
             </button>
           </div>
         </div>
